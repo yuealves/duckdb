@@ -2,9 +2,55 @@
 
 #include "csi_extension.hpp"
 
+#include "duckdb/function/table_function.hpp"
+#include "duckdb/main/extension_util.hpp"
+
 namespace duckdb {
 
+struct CSIData : public GlobalTableFunctionState {
+	CSIData() : offset(0) {
+	}
+	idx_t offset;
+};
+
+static duckdb::unique_ptr<FunctionData> CSIQueryBind(ClientContext &context, TableFunctionBindInput &input,
+                                                     vector<LogicalType> &return_types, vector<string> &names) {
+
+	names.emplace_back("csi row id");
+	return_types.emplace_back(LogicalType::INTEGER);
+
+	names.emplace_back("csi value");
+	return_types.emplace_back(LogicalType::VARCHAR);
+
+	return nullptr;
+}
+
+static void CSIQueryFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
+	auto &data = data_p.global_state->Cast<CSIData>();
+	idx_t total_rows = 5; // 5 rows are enough for demo
+	if (data.offset >= total_rows) {
+		return;
+	}
+	idx_t chunk_count = 0;
+	while (data.offset < total_rows && chunk_count < STANDARD_VECTOR_SIZE) {
+		output.SetValue(0, chunk_count, Value::INTEGER((int32_t)data.offset + 1));
+		output.SetValue(1, chunk_count, Value("csi dummy string"));
+		data.offset++;
+		chunk_count++;
+	}
+	output.SetCardinality(chunk_count);
+}
+
+unique_ptr<GlobalTableFunctionState> CSIInit(ClientContext &context, TableFunctionInitInput &input) {
+	auto result = make_uniq<CSIData>();
+	return std::move(result);
+}
+
 static void LoadInternal(DuckDB &db) {
+	auto &db_instance = *db.instance;
+	// create the CSI_QUERIES function that returns the query
+	TableFunction csi_query_func("csi_queries", {}, CSIQueryFunction, CSIQueryBind, CSIInit);
+	ExtensionUtil::RegisterFunction(db_instance, csi_query_func);
 }
 
 void CsiExtension::Load(DuckDB &db) {
