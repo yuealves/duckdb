@@ -107,6 +107,9 @@ endif
 ifeq (${BUILD_AUTOCOMPLETE}, 1)
 	BUILD_EXTENSIONS:=${BUILD_EXTENSIONS};autocomplete
 endif
+ifeq (${BUILD_CSI}, 1)
+	BUILD_EXTENSIONS:=${BUILD_EXTENSIONS};csi
+endif
 ifeq (${BUILD_ICU}, 1)
 	BUILD_EXTENSIONS:=${BUILD_EXTENSIONS};icu
 endif
