@@ -2,8 +2,12 @@
 
 #include "csi_extension.hpp"
 
+#include "duckdb/catalog/default/default_functions.hpp"
+#include "duckdb/common/string_util.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/main/extension_util.hpp"
+#include "duckdb/parser/expression/function_expression.hpp"
+#include "duckdb/parser/tableref/table_function_ref.hpp"
 
 namespace duckdb {
 
@@ -39,6 +43,28 @@ static void CSIQueryFunction(ClientContext &context, TableFunctionInput &data_p,
 		chunk_count++;
 	}
 	output.SetCardinality(chunk_count);
+}
+
+//===--------------------------------------------------------------------===//
+// Scan Replacement
+//===--------------------------------------------------------------------===//
+unique_ptr<TableRef> CSIScanReplacement(ClientContext &context, ReplacementScanInput &input,
+                                        optional_ptr<ReplacementScanData> data) {
+	auto table_name = ReplacementScan::GetFullPath(input);
+	if (!ReplacementScan::CanReplace(table_name, {"csi"})) {
+		return nullptr;
+	}
+	auto table_function = make_uniq<TableFunctionRef>();
+	vector<unique_ptr<ParsedExpression>> children;
+	children.push_back(make_uniq<ConstantExpression>(Value(table_name)));
+	table_function->function = make_uniq<FunctionExpression>("csi_scan", std::move(children));
+
+	if (!FileSystem::HasGlob(table_name)) {
+		auto &fs = FileSystem::GetFileSystem(context);
+		table_function->alias = fs.ExtractBaseName(table_name);
+	}
+
+	return std::move(table_function);
 }
 
 unique_ptr<GlobalTableFunctionState> CSIInit(ClientContext &context, TableFunctionInitInput &input) {
