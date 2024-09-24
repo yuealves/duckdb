@@ -74,9 +74,14 @@ unique_ptr<GlobalTableFunctionState> CSIInit(ClientContext &context, TableFuncti
 
 static void LoadInternal(DuckDB &db) {
 	auto &db_instance = *db.instance;
-	// create the CSI_QUERIES function that returns the query
-	TableFunction csi_query_func("csi_queries", {}, CSIQueryFunction, CSIQueryBind, CSIInit);
-	ExtensionUtil::RegisterFunction(db_instance, csi_query_func);
+	// create the CSI_SCAN function that returns the query
+	TableFunction csi_scan_func("csi_scan", {LogicalType::VARCHAR}, CSIQueryFunction, CSIQueryBind, CSIInit);
+	csi_scan_func.arguments[0] = LogicalType::VARCHAR;
+	ExtensionUtil::RegisterFunction(db_instance, csi_scan_func);
+
+	// csi replacement scan
+	auto &config = DBConfig::GetConfig(*db.instance);
+	config.replacement_scans.emplace_back(CSIScanReplacement);
 }
 
 void CsiExtension::Load(DuckDB &db) {
