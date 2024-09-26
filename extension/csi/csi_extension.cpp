@@ -1,6 +1,7 @@
 #define DUCKDB_EXTENSION_MAIN
 
 #include "csi_extension.hpp"
+#include "csi_scan.hpp"
 
 #include "duckdb/catalog/default/default_functions.hpp"
 #include "duckdb/common/string_util.hpp"
@@ -20,30 +21,72 @@ struct CSIData : public GlobalTableFunctionState {
 static duckdb::unique_ptr<FunctionData> CSIQueryBind(ClientContext &context, TableFunctionBindInput &input,
                                                      vector<LogicalType> &return_types, vector<string> &names) {
 
-	names.emplace_back("csi row id");
+	names.emplace_back("csi_row_id");
 	return_types.emplace_back(LogicalType::INTEGER);
 
-	names.emplace_back("csi value");
-	return_types.emplace_back(LogicalType::VARCHAR);
+	names.emplace_back("csi_value");
+	// return_types.emplace_back(LogicalType::VARCHAR);
+	return_types.emplace_back(LogicalType::INTEGER);
 
 	return nullptr;
 }
 
+unique_ptr<GlobalTableFunctionState> CSIScanInitGlobal(ClientContext &, TableFunctionInitInput &) {
+	auto csi_fake_table = make_shared_ptr<CSIFakeTable>(2 /*num_cols*/);
+	auto result = make_uniq<CSIScanGlobalState>(csi_fake_table);
+	return std::move(result);
+}
+
+unique_ptr<LocalTableFunctionState> CSIScanInitLocal(ExecutionContext &, TableFunctionInitInput &,
+                                                     GlobalTableFunctionState *global_state) {
+	auto &gstate = global_state->Cast<CSIScanGlobalState>();
+	auto result = make_uniq<CSIScanLocalState>();
+	result->pack_index = gstate.GetNextPackIdx();
+	return std::move(result);
+}
+
 static void CSIQueryFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
-	auto &data = data_p.global_state->Cast<CSIData>();
-	idx_t total_rows = 5; // 5 rows are enough for demo
-	if (data.offset >= total_rows) {
+	auto &gstate = data_p.global_state->Cast<CSIScanGlobalState>();
+	auto &lstate = data_p.local_state->Cast<CSIScanLocalState>();
+	idx_t total_rows = lstate.GetPackSize(); // 4 rows are enough for demo
+	if (lstate.pack_index < 0) {
 		return;
 	}
+	if (lstate.row_index >= total_rows) {
+		lstate.pack_index = gstate.GetNextPackIdx();
+		if (lstate.pack_index < 0) {
+			return;
+		}
+		lstate.row_index = 0;
+	}
 	idx_t chunk_count = 0;
-	while (data.offset < total_rows && chunk_count < STANDARD_VECTOR_SIZE) {
-		output.SetValue(0, chunk_count, Value::INTEGER((int32_t)data.offset + 1));
-		output.SetValue(1, chunk_count, Value("csi dummy string"));
-		data.offset++;
+	while (lstate.row_index < total_rows && chunk_count < STANDARD_VECTOR_SIZE) {
+		output.SetValue(0, chunk_count,
+		                Value::INTEGER((int32_t)gstate.GetFakeCSIValue(0, lstate.pack_index, lstate.row_index)));
+		output.SetValue(1, chunk_count,
+		                Value::INTEGER((int32_t)gstate.GetFakeCSIValue(1, lstate.pack_index, lstate.row_index)));
+		// output.SetValue(1, chunk_count, Value("csi dummy string"));
+		lstate.row_index++;
 		chunk_count++;
 	}
 	output.SetCardinality(chunk_count);
 }
+
+// static void CSIQueryFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
+// 	auto &data = data_p.global_state->Cast<CSIData>();
+// 	idx_t total_rows = 5; // 5 rows are enough for demo
+// 	if (data.offset >= total_rows) {
+// 		return;
+// 	}
+// 	idx_t chunk_count = 0;
+// 	while (data.offset < total_rows && chunk_count < STANDARD_VECTOR_SIZE) {
+// 		output.SetValue(0, chunk_count, Value::INTEGER((int32_t)data.offset + 1));
+// 		output.SetValue(1, chunk_count, Value("csi dummy string"));
+// 		data.offset++;
+// 		chunk_count++;
+// 	}
+// 	output.SetCardinality(chunk_count);
+// }
 
 //===--------------------------------------------------------------------===//
 // Scan Replacement
@@ -75,7 +118,7 @@ unique_ptr<GlobalTableFunctionState> CSIInit(ClientContext &context, TableFuncti
 static void LoadInternal(DuckDB &db) {
 	auto &db_instance = *db.instance;
 	// create the CSI_SCAN function that returns the query
-	TableFunction csi_scan_func("csi_scan", {LogicalType::VARCHAR}, CSIQueryFunction, CSIQueryBind, CSIInit);
+	TableFunction csi_scan_func("csi_scan", {LogicalType::VARCHAR}, CSIQueryFunction, CSIQueryBind, CSIScanInitGlobal, CSIScanInitLocal);
 	csi_scan_func.arguments[0] = LogicalType::VARCHAR;
 	ExtensionUtil::RegisterFunction(db_instance, csi_scan_func);
 
