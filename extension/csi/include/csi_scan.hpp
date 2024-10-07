@@ -74,10 +74,12 @@ struct CSIFakeTable {
 };
 
 struct CSIScanGlobalState : public GlobalTableFunctionState {
-	explicit CSIScanGlobalState(shared_ptr<CSIFakeTable> fake_table) : csi_fake_table(fake_table) {
+	explicit CSIScanGlobalState(shared_ptr<CSIFakeTable> fake_table, const vector<column_t> &column_ids)
+	    : column_ids(column_ids), csi_fake_table(fake_table){
 		current_pack_id = 0;
 		total_pack_num = fake_table ? fake_table->GetNumPacks() : 0;
 	}
+	const vector<column_t> &column_ids;
 	shared_ptr<CSIFakeTable> csi_fake_table;
 	std::mutex lock;
 	idx_t current_pack_id;

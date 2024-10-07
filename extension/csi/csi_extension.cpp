@@ -31,9 +31,9 @@ static duckdb::unique_ptr<FunctionData> CSIQueryBind(ClientContext &context, Tab
 	return nullptr;
 }
 
-unique_ptr<GlobalTableFunctionState> CSIScanInitGlobal(ClientContext &, TableFunctionInitInput &) {
+unique_ptr<GlobalTableFunctionState> CSIScanInitGlobal(ClientContext &, TableFunctionInitInput &input) {
 	auto csi_fake_table = make_shared_ptr<CSIFakeTable>(2 /*num_cols*/);
-	auto result = make_uniq<CSIScanGlobalState>(csi_fake_table);
+	auto result = make_uniq<CSIScanGlobalState>(csi_fake_table, input.column_ids);
 	return std::move(result);
 }
 
@@ -59,15 +59,41 @@ static void CSIQueryFunction(ClientContext &context, TableFunctionInput &data_p,
 		}
 		lstate.row_index = 0;
 	}
+	// idx_t chunk_count = 0;
+	// while (lstate.row_index < total_rows && chunk_count < STANDARD_VECTOR_SIZE) {
+	// 	for (idx_t col_idx = 0; col_idx < gstate.column_ids.size(); col_idx++) {
+	// 		column_t col = gstate.column_ids[col_idx];
+	// 		output.SetValue(col_idx, chunk_count,
+	// 		                Value::INTEGER((int32_t)gstate.GetFakeCSIValue(col, lstate.pack_index, lstate.row_index)));
+	// 	}
+	// 	lstate.row_index++;
+	// 	chunk_count++;
+	// 	// output.SetValue(0, chunk_count,
+	// 	//                 Value::INTEGER((int32_t)gstate.GetFakeCSIValue(0, lstate.pack_index, lstate.row_index)));
+	// 	// output.SetValue(1, chunk_count,
+	// 	//                 Value::INTEGER((int32_t)gstate.GetFakeCSIValue(1, lstate.pack_index, lstate.row_index)));
+	// 	// output.SetValue(1, chunk_count, Value("csi dummy string"));
+	// }
 	idx_t chunk_count = 0;
+	idx_t col_idx;
+
+	// process the first column，update lstate.row_index and chunk_count
+	col_idx = 0;
+	column_t first_col = gstate.column_ids[col_idx];
 	while (lstate.row_index < total_rows && chunk_count < STANDARD_VECTOR_SIZE) {
-		output.SetValue(0, chunk_count,
-		                Value::INTEGER((int32_t)gstate.GetFakeCSIValue(0, lstate.pack_index, lstate.row_index)));
-		output.SetValue(1, chunk_count,
-		                Value::INTEGER((int32_t)gstate.GetFakeCSIValue(1, lstate.pack_index, lstate.row_index)));
-		// output.SetValue(1, chunk_count, Value("csi dummy string"));
+		output.SetValue(
+		    col_idx, chunk_count,
+		    Value::INTEGER((int32_t)gstate.GetFakeCSIValue(first_col, lstate.pack_index, lstate.row_index)));
 		lstate.row_index++;
 		chunk_count++;
+	}
+
+	// process remaining columns
+	for (col_idx = 1; col_idx < gstate.column_ids.size(); col_idx++) {
+		column_t col = gstate.column_ids[col_idx];
+		for (idx_t i = 0; i < chunk_count; i++) {
+			output.SetValue(col_idx, i, Value::INTEGER((int32_t)gstate.GetFakeCSIValue(col, lstate.pack_index, i)));
+		}
 	}
 	output.SetCardinality(chunk_count);
 }
@@ -120,6 +146,7 @@ static void LoadInternal(DuckDB &db) {
 	// create the CSI_SCAN function that returns the query
 	TableFunction csi_scan_func("csi_scan", {LogicalType::VARCHAR}, CSIQueryFunction, CSIQueryBind, CSIScanInitGlobal, CSIScanInitLocal);
 	csi_scan_func.arguments[0] = LogicalType::VARCHAR;
+	csi_scan_func.projection_pushdown = true;
 	ExtensionUtil::RegisterFunction(db_instance, csi_scan_func);
 
 	// csi replacement scan
