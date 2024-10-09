@@ -905,6 +905,25 @@ Value EnableProgressBarSetting::GetSetting(const ClientContext &context) {
 }
 
 //===--------------------------------------------------------------------===//
+// Enable Selection vector bitmap 
+//===--------------------------------------------------------------------===//
+void EnableSelectionVectorBitmapSetting::ResetLocal(ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	//ProgressBar::SystemOverrideCheck(config);
+	config.enable_selection_vector_bitmap = ClientConfig().enable_selection_vector_bitmap;
+}
+
+void EnableSelectionVectorBitmapSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	//ProgressBar::SystemOverrideCheck(config);
+	config.enable_selection_vector_bitmap = input.GetValue<bool>();
+}
+
+Value EnableSelectionVectorBitmapSetting::GetSetting(const ClientContext &context) {
+	return Value::BOOLEAN(ClientConfig::GetConfig(context).enable_selection_vector_bitmap);
+}
+
+//===--------------------------------------------------------------------===//
 // Enable Progress Bar Print
 //===--------------------------------------------------------------------===//
 void EnableProgressBarPrintSetting::SetLocal(ClientContext &context, const Value &input) {

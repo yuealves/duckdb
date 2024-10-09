@@ -26,6 +26,8 @@ public:
 	//! The constant value to filter on
 	Value constant;
 
+	vector<vector<uint64_t>> rowgroup_bitmap;  //row group id -> bitmap
+
 public:
 	FilterPropagateResult CheckStatistics(BaseStatistics &stats) override;
 	string ToString(const string &column_name) override;

@@ -15,6 +15,7 @@
 #include "duckdb/common/enums/scan_options.hpp"
 #include "duckdb/storage/table/segment_lock.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
+#include "duckdb/execution/index/bindex.hpp"
 
 namespace duckdb {
 class AdaptiveFilter;
@@ -36,6 +37,7 @@ class RowGroupSegmentTree;
 class TableFilter;
 struct AdaptiveFilterState;
 struct TableScanOptions;
+class Bindex;
 
 struct SegmentScanState {
 	virtual ~SegmentScanState() {
@@ -195,6 +197,7 @@ public:
 	TableScanOptions &GetOptions();
 	bool Scan(DuckTransaction &transaction, DataChunk &result);
 	bool ScanCommitted(DataChunk &result, TableScanType type);
+	bool ScanCommittedBindex(DataChunk &result, TableScanType type);
 	bool ScanCommitted(DataChunk &result, SegmentLock &l, TableScanType type);
 
 private:

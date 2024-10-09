@@ -18,6 +18,7 @@
 #include "duckdb/storage/table/segment_base.hpp"
 #include "duckdb/storage/block.hpp"
 #include "duckdb/common/enums/checkpoint_type.hpp"
+#include "duckdb/execution/index/bindex.hpp"
 
 namespace duckdb {
 class AttachedDatabase;
@@ -85,6 +86,9 @@ private:
 	vector<shared_ptr<ColumnData>> columns;
 
 public:
+
+	shared_ptr<Bindex> bound_bindex;
+
 	void MoveToCollection(RowGroupCollection &collection, idx_t new_start);
 	RowGroupCollection &GetCollection() {
 		return collection.get();

@@ -23,6 +23,8 @@ public:
 
 	void Initialize(PersistentTableData &data);
 
+	string getTableName();
+
 protected:
 	unique_ptr<RowGroup> LoadSegment() override;
 

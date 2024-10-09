@@ -50,6 +50,9 @@ struct ClientConfig {
 	const char *system_progress_bar_disable_reason = nullptr;
 	//! If the progress bar is enabled or not.
 	bool enable_progress_bar = false;
+
+	bool enable_selection_vector_bitmap = false;
+
 	//! If the print of the progress bar is enabled
 	bool print_progress_bar = true;
 	//! The wait time before showing the progress bar

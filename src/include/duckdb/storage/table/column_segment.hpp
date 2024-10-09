@@ -74,6 +74,11 @@ public:
 
 	static idx_t FilterSelection(SelectionVector &sel, Vector &vector, UnifiedVectorFormat &vdata,
 	                             const TableFilter &filter, idx_t scan_count, idx_t &approved_tuple_count);
+	static idx_t FilterSelectionBitmap(SelectionBitmap &sel_bitmap, Vector &vector, UnifiedVectorFormat &vdata,
+	                             const TableFilter &filter, idx_t scan_count, idx_t &approved_tuple_count);
+	static idx_t FilterSelectionBindex(SelectionVector &sel, Vector &vector, UnifiedVectorFormat &vdata,
+	                             TableFilter &filter, idx_t scan_count, idx_t &approved_tuple_count,
+								 shared_ptr<Bindex> bindex, idx_t vector_index);
 
 	//! Skip a scan forward to the row_index specified in the scan state
 	void Skip(ColumnScanState &state);

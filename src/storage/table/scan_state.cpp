@@ -8,6 +8,9 @@
 #include "duckdb/storage/table/row_group_segment_tree.hpp"
 #include "duckdb/transaction/duck_transaction.hpp"
 
+#include <iostream>
+#include <thread>
+
 namespace duckdb {
 
 TableScanState::TableScanState() : table_state(*this), local_state(*this) {
@@ -211,6 +214,59 @@ bool CollectionScanState::ScanCommitted(DataChunk &result, TableScanType type) {
 			}
 		}
 	}
+	return false;
+}
+
+bool CollectionScanState::ScanCommittedBindex(DataChunk &result, TableScanType type) {
+	std::thread::id this_id = std::this_thread::get_id();
+	//std::cout << "enter scan commmit bindex" << std::endl;
+	while (row_group) {
+		row_group->ScanCommitted(*this, result, type);
+		if (result.size() > 0) {
+			//std::cout << "result size: " << result.size() << std::endl;
+			if( row_group->bound_bindex == nullptr ){
+				row_group->bound_bindex = make_shared_ptr<Bindex>();
+				row_group->bound_bindex->Init(
+					row_groups->getTableName(),GetColumnIds()[0],row_group->index
+				);
+				row_group->bound_bindex->create_tid = this_id;
+				//std::cout << "tid : " << this_id  <<  " create index for rowgroup : " << row_group->index << std::endl; 
+			}
+			if( row_group->bound_bindex->finish_read == true){
+				//result.Reset();
+				//std::cout << "[error] rowgroup : " << row_group->index  << " index has created" << std::endl; 
+				return true;  
+			}
+			UnifiedVectorFormat data0;
+			result.data[0].ToUnifiedFormat(result.size(), data0);
+			auto input_data0 = UnifiedVectorFormat::GetData<int64_t>(data0);
+
+			UnifiedVectorFormat data1;
+			result.data[1].ToUnifiedFormat(result.size(), data1);
+			auto input_data1 = UnifiedVectorFormat::GetData<int64_t>(data1);
+
+			for(idx_t  i = 0 ; i < result.size() ; i++){
+				row_group->bound_bindex->insertPair(input_data0[i],input_data1[i] - (row_group->index*122880) );
+			}
+			//result.Reset();
+			//std::cout << "row group : " << row_group->index  << " read bindex data " << std::endl;
+			return true;
+		} else {
+			if( row_group->bound_bindex != nullptr && row_group->bound_bindex->finish_read == false
+				&& this_id == row_group->bound_bindex->create_tid ){
+				row_group->bound_bindex->finish_read = true;
+				row_group->bound_bindex->buildBindex(60);
+				//std::cout << row_group->bound_bindex->getInfo() << std::endl;
+			}
+
+			row_group = row_groups->GetNextSegment(row_group);
+			if (row_group) {
+				row_group->InitializeScan(*this);
+				//std::cout << "switch to rowgroup : " << row_group->index  << std::endl;
+			}
+		}
+	}
+	//std::cout << "finish all row group  " << std::endl;
 	return false;
 }
 

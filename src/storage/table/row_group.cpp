@@ -546,6 +546,16 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 				}
 			}
 		} else {
+
+			// read from context,check if use bitmap to record scan result
+			std::weak_ptr<duckdb::ClientContext> context =  ((transaction.transaction.get())->context).UnsafeGetInternal() ;
+
+			bool enable_selection_vector_bitmap = false;  
+    		if (auto locked = context.lock()) {  
+				auto &config = ClientConfig::GetConfig(*locked); 
+				enable_selection_vector_bitmap = config.enable_selection_vector_bitmap;
+    		} 
+
 			// partial scan: we have deletions or table filters
 			idx_t approved_tuple_count = count;
 			SelectionVector sel;
@@ -554,6 +564,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			} else {
 				sel.Initialize(nullptr);
 			}
+
 			//! first, we scan the columns with filters, fetch their data and generate a selection vector.
 			//! get runtime statistics
 			auto adaptive_filter = filter_info.GetAdaptiveFilter();
@@ -561,8 +572,21 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			if (has_filters) {
 				D_ASSERT(ALLOW_UPDATES);
 				auto &filter_list = filter_info.GetFilterList();
-				for (idx_t i = 0; i < filter_list.size(); i++) {
-					auto filter_idx = adaptive_filter->permutation[i];
+
+				if( enable_selection_vector_bitmap ){
+					//std::cout <<"now row group: " << state.row_group->index 
+					//<< " vector index: " << state.vector_index << std::endl;
+
+					//if(state.row_group->bound_bindex != nullptr ){
+					//	std::cout << state.row_group->bound_bindex->getInfo() << std::endl;
+					//}else{
+					//	std::cout << state.row_group->index << " bindex is null " << std::endl; 
+					//}
+		
+					if(sel.data() != nullptr && filter_list.size() != 1 ){
+						std::cout << "[warning] error occor!" << std::endl;
+					}
+					auto filter_idx = adaptive_filter->permutation[0];
 					auto &filter = filter_list[filter_idx];
 					if (filter.IsAlwaysTrue()) {
 						// this filter is always true - skip it
@@ -570,14 +594,31 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 					}
 					auto scan_idx = filter.scan_column_index;
 					auto &col_data = GetColumn(filter.table_column_index);
-					col_data.Select(transaction, state.vector_index, state.column_scans[scan_idx],
-					                result.data[scan_idx], sel, approved_tuple_count, filter.filter);
-				}
-				for (auto &table_filter : filter_list) {
-					if (table_filter.IsAlwaysTrue()) {
-						continue;
+					col_data.SelectBindex(transaction, state.vector_index, state.column_scans[scan_idx],
+									result.data[scan_idx], sel, approved_tuple_count, 
+									filter.filter,state.row_group->bound_bindex);
+
+				}else{
+					for (idx_t i = 0; i < filter_list.size(); i++) {
+						auto filter_idx = adaptive_filter->permutation[i];
+						auto &filter = filter_list[filter_idx];
+						if (filter.IsAlwaysTrue()) {
+							// this filter is always true - skip it
+							continue;
+						}
+						auto scan_idx = filter.scan_column_index;
+						auto &col_data = GetColumn(filter.table_column_index);
+						col_data.Select(transaction, state.vector_index, state.column_scans[scan_idx],
+										result.data[scan_idx], sel, approved_tuple_count, filter.filter);
 					}
-					result.data[table_filter.scan_column_index].Slice(sel, approved_tuple_count);
+				
+				
+					for (auto &table_filter : filter_list) {
+						if (table_filter.IsAlwaysTrue()) {
+							continue;
+						}
+						result.data[table_filter.scan_column_index].Slice(sel, approved_tuple_count);
+					}
 				}
 			}
 			if (approved_tuple_count == 0) {

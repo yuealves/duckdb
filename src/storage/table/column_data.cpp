@@ -299,12 +299,32 @@ idx_t ColumnData::ScanCount(ColumnScanState &state, Vector &result, idx_t scan_c
 }
 
 void ColumnData::Select(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
-                        SelectionVector &sel, idx_t &s_count, const TableFilter &filter) {
+                        SelectionVector &sel, idx_t &s_count, const TableFilter &filter  ) {	
 	idx_t scan_count = Scan(transaction, vector_index, state, result);
 
 	UnifiedVectorFormat vdata;
 	result.ToUnifiedFormat(scan_count, vdata);
 	ColumnSegment::FilterSelection(sel, result, vdata, filter, scan_count, s_count);
+}
+
+void ColumnData::SelectBindex(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
+                        SelectionVector &sel, idx_t &s_count, TableFilter &filter ,shared_ptr<Bindex> bindex ) {	
+	//idx_t scan_count = Scan(transaction, vector_index, state, result);
+	idx_t scan_count = s_count;
+
+	UnifiedVectorFormat vdata;
+	//result.ToUnifiedFormat(scan_count, vdata);
+	ColumnSegment::FilterSelectionBindex(sel, result, vdata, filter, scan_count, s_count, bindex,vector_index);
+}
+
+
+void ColumnData::SelectBitmap(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
+                        SelectionBitmap &sel_bitmap, idx_t &s_count, const TableFilter &filter  ) {	
+	idx_t scan_count = Scan(transaction, vector_index, state, result);
+
+	UnifiedVectorFormat vdata;
+	result.ToUnifiedFormat(scan_count, vdata);
+	ColumnSegment::FilterSelectionBitmap(sel_bitmap, result, vdata, filter, scan_count, s_count);
 }
 
 void ColumnData::FilterScan(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,

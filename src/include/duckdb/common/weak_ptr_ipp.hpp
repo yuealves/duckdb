@@ -27,6 +27,11 @@ public:
 	template <class U, typename std::enable_if<compatible_with_t<U, T>::value, int>::type = 0>
 	weak_ptr(weak_ptr<U> const &ptr) noexcept : internal(ptr.internal) {
 	}
+
+	original UnsafeGetInternal(){
+		return internal;
+	}
+
 #ifdef DUCKDB_CLANG_TIDY
 	[[clang::reinitializes]]
 #endif

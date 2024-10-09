@@ -293,7 +293,7 @@ void DataTable::Scan(DuckTransaction &transaction, DataChunk &result, TableScanS
 }
 
 bool DataTable::CreateIndexScan(TableScanState &state, DataChunk &result, TableScanType type) {
-	return state.table_state.ScanCommitted(result, type);
+	return state.table_state.ScanCommittedBindex(result, type);
 }
 
 //===--------------------------------------------------------------------===//

@@ -44,6 +44,15 @@ static void PragmaDisableProgressBar(ClientContext &context, const FunctionParam
 	ClientConfig::GetConfig(context).enable_progress_bar = false;
 }
 
+static void PragmaEnableSelectionVectorBitmap(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).enable_selection_vector_bitmap = true;
+}
+
+static void PragmaDisableSelectionVectorBitmap(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).enable_selection_vector_bitmap = false;
+}
+
+
 static void PragmaEnablePrintProgressBar(ClientContext &context, const FunctionParameters &parameters) {
 	ClientConfig::GetConfig(context).print_progress_bar = true;
 }
@@ -153,6 +162,9 @@ void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 
 	set.AddFunction(PragmaFunction::PragmaStatement("enable_progress_bar", PragmaEnableProgressBar));
 	set.AddFunction(PragmaFunction::PragmaStatement("disable_progress_bar", PragmaDisableProgressBar));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_selection_vector_bitmap", PragmaEnableSelectionVectorBitmap));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_selection_vector_bitmap", PragmaDisableSelectionVectorBitmap));
 
 	set.AddFunction(PragmaFunction::PragmaStatement("enable_print_progress_bar", PragmaEnablePrintProgressBar));
 	set.AddFunction(PragmaFunction::PragmaStatement("disable_print_progress_bar", PragmaDisablePrintProgressBar));

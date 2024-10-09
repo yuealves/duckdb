@@ -36,6 +36,11 @@ void RowGroupSegmentTree::Initialize(PersistentTableData &data) {
 	reader = make_uniq<MetadataReader>(collection.GetMetadataManager(), data.block_pointer);
 }
 
+
+string RowGroupSegmentTree::getTableName(){
+	return collection.GetTableInfo().GetTableName();
+}
+
 unique_ptr<RowGroup> RowGroupSegmentTree::LoadSegment() {
 	if (current_row_group >= max_row_group) {
 		reader.reset();

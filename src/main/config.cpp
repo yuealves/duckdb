@@ -88,6 +88,7 @@ static const ConfigurationOption internal_options[] = {
     DUCKDB_GLOBAL(EnableHTTPMetadataCacheSetting),
     DUCKDB_LOCAL(EnableProfilingSetting),
     DUCKDB_LOCAL(EnableProgressBarSetting),
+	DUCKDB_LOCAL(EnableSelectionVectorBitmapSetting),
     DUCKDB_LOCAL(EnableProgressBarPrintSetting),
     DUCKDB_LOCAL(ErrorsAsJsonSetting),
     DUCKDB_LOCAL(ExplainOutputSetting),

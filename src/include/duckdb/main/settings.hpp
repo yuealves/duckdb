@@ -395,6 +395,16 @@ struct EnableProgressBarSetting {
 	static Value GetSetting(const ClientContext &context);
 };
 
+struct EnableSelectionVectorBitmapSetting {
+	static constexpr const char *Name = "enable_selection_vector_bitmap";
+	static constexpr const char *Description =
+	    "Enables selection vector bitmap,to use bitmap record scan result";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::BOOLEAN;
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
 struct EnableProgressBarPrintSetting {
 	static constexpr const char *Name = "enable_progress_bar_print";
 	static constexpr const char *Description =
