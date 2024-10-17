@@ -37,12 +37,93 @@ unique_ptr<GlobalTableFunctionState> CSIScanInitGlobal(ClientContext &, TableFun
 	return std::move(result);
 }
 
-unique_ptr<LocalTableFunctionState> CSIScanInitLocal(ExecutionContext &, TableFunctionInitInput &,
+unique_ptr<LocalTableFunctionState> CSIScanInitLocal(ExecutionContext &, TableFunctionInitInput &input,
                                                      GlobalTableFunctionState *global_state) {
 	auto &gstate = global_state->Cast<CSIScanGlobalState>();
 	auto result = make_uniq<CSIScanLocalState>();
 	result->pack_index = gstate.GetNextPackIdx();
+	if (input.filters) {
+		for (const auto &pair : input.filters->filters) {
+			result->filters[pair.first] = pair.second.get();
+		}
+	}
 	return std::move(result);
+}
+
+template <class T, class OP, bool HAS_NULL>
+static idx_t TemplatedCSIFilterSelection(UnifiedVectorFormat &vdata, T predicate, SelectionVector &sel, idx_t approved_tuple_count,
+										 SelectionVector &result_sel) {
+	auto vec = UnifiedVectorFormat::GetData<T>(vdata);
+	idx_t result_count = 0;
+	for (idx_t i = 0; i < approved_tuple_count; i++) {
+		auto idx = sel.get_index(i);
+		auto vector_idx = vdata.sel->get_index(idx);
+		bool comparison_result =
+		    (!HAS_NULL) && OP::Operation(vec[vector_idx], predicate);
+		result_sel.set_index(result_count, idx);
+		result_count += comparison_result;
+	}
+	return result_count;
+}
+
+template <class T>
+static void CSIFilterSelectionSwitch(UnifiedVectorFormat &vdata, T predicate, SelectionVector &sel,
+									 idx_t &approved_tuple_count, ExpressionType comparison_type) {
+	SelectionVector new_sel(approved_tuple_count);
+	switch (comparison_type) {
+	case ExpressionType::COMPARE_EQUAL: {
+		approved_tuple_count = TemplatedCSIFilterSelection<T, Equals, false>(vdata, predicate, sel, approved_tuple_count, new_sel);
+		break;
+	}
+	case ExpressionType::COMPARE_LESSTHAN: {
+		approved_tuple_count =
+		    TemplatedCSIFilterSelection<T, LessThan, false>(vdata, predicate, sel, approved_tuple_count, new_sel);
+		break;
+	}
+	case ExpressionType::COMPARE_GREATERTHAN: {
+		approved_tuple_count =
+		    TemplatedCSIFilterSelection<T, GreaterThan, false>(vdata, predicate, sel, approved_tuple_count, new_sel);
+		break;
+	}
+	case ExpressionType::COMPARE_LESSTHANOREQUALTO: {
+		approved_tuple_count =
+		    TemplatedCSIFilterSelection<T, LessThanEquals, false>(vdata, predicate, sel, approved_tuple_count, new_sel);
+		break;
+	}
+	case ExpressionType::COMPARE_GREATERTHANOREQUALTO: {
+		approved_tuple_count = TemplatedCSIFilterSelection<T, GreaterThanEquals, false>(vdata, predicate, sel,
+		                                                                                approved_tuple_count, new_sel);
+		break;
+	}
+	default:
+		throw NotImplementedException("Unknown comparison type for filter pushed down to table!");
+	}
+	sel.Initialize(new_sel);
+}
+
+	void CSIFilterSelect(SelectionVector &sel, Vector &result, UnifiedVectorFormat &vdata,  const TableFilter &filter, idx_t scan_count, idx_t &approved_count) {
+	switch (filter.filter_type) {
+	case TableFilterType::CONJUNCTION_AND: {
+		auto &conjunction_and = filter.Cast<ConjunctionAndFilter>();
+		for (auto &child_filter : conjunction_and.child_filters) {
+			CSIFilterSelect(sel, result, vdata, *child_filter, scan_count, approved_count);
+		}
+		return;
+	}
+	case TableFilterType::CONSTANT_COMPARISON: {
+		auto &constant_filter = filter.Cast<ConstantFilter>();
+		switch (result.GetType().InternalType()) {
+		case PhysicalType::INT32: {
+			auto predicate = IntegerValue::Get(constant_filter.constant);
+			CSIFilterSelectionSwitch<int32_t>(vdata, predicate, sel, approved_count, constant_filter.comparison_type);
+		}
+		default:
+			return;
+		}
+	}
+	default:
+		return;
+	}
 }
 
 static void CSIQueryFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
@@ -95,7 +176,34 @@ static void CSIQueryFunction(ClientContext &context, TableFunctionInput &data_p,
 			output.SetValue(col_idx, i, Value::INTEGER((int32_t)gstate.GetFakeCSIValue(col, lstate.pack_index, i)));
 		}
 	}
-	output.SetCardinality(chunk_count);
+
+	// apply filters
+	SelectionVector sel;
+	sel.Initialize(nullptr);
+	idx_t approved_count = chunk_count;
+	for (const auto &pair : lstate.filters) {
+		idx_t col_idx = pair.first;
+		const TableFilter &filter = *pair.second;
+		UnifiedVectorFormat vdata;
+		Vector &data = output.data[col_idx];
+		data.ToUnifiedFormat(chunk_count, vdata);
+		CSIFilterSelect(sel, data, vdata, filter, chunk_count, approved_count);
+	}
+	if (approved_count == 0) {
+		output.Reset();
+		return;
+	}
+	for (const auto &pair : lstate.filters) {
+		idx_t col_idx = pair.first;
+		output.data[col_idx].Slice(sel, approved_count);
+	}
+	for (idx_t i = 0; i < gstate.column_ids.size(); i++) {
+		if (!lstate.filters.count(i)) {
+			output.data[i].Slice(sel, approved_count);
+		}
+	}
+
+	output.SetCardinality(approved_count);
 }
 
 // static void CSIQueryFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
@@ -144,9 +252,11 @@ unique_ptr<GlobalTableFunctionState> CSIInit(ClientContext &context, TableFuncti
 static void LoadInternal(DuckDB &db) {
 	auto &db_instance = *db.instance;
 	// create the CSI_SCAN function that returns the query
-	TableFunction csi_scan_func("csi_scan", {LogicalType::VARCHAR}, CSIQueryFunction, CSIQueryBind, CSIScanInitGlobal, CSIScanInitLocal);
+	TableFunction csi_scan_func("csi_scan", {LogicalType::VARCHAR}, CSIQueryFunction, CSIQueryBind, CSIScanInitGlobal,
+	                            CSIScanInitLocal);
 	csi_scan_func.arguments[0] = LogicalType::VARCHAR;
 	csi_scan_func.projection_pushdown = true;
+	csi_scan_func.filter_pushdown = true;
 	ExtensionUtil::RegisterFunction(db_instance, csi_scan_func);
 
 	// csi replacement scan

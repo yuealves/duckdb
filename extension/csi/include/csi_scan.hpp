@@ -114,5 +114,6 @@ struct CSIScanLocalState : public LocalTableFunctionState {
 	}
 	int pack_index;
 	idx_t row_index;
+	std::unordered_map<idx_t, TableFilter *> filters;
 };
 } // namespace duckdb
