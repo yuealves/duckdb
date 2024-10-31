@@ -26,6 +26,7 @@ add_library_unity(
   detach_info.cpp
   drop_info.cpp
   extra_drop_info.cpp
+  hint_info.cpp
   load_info.cpp
   sample_options.cpp
   parse_info.cpp

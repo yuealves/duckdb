@@ -22,6 +22,7 @@ DropStmt
 ExecuteStmt
 ExplainStmt
 ExportStmt
+HintStmt
 ImportStmt
 IndexStmt
 InsertStmt

@@ -872,7 +872,7 @@ typedef struct PGRangeTblFunction {
  * tleSortGroupRef must match ressortgroupref of exactly one entry of the
  *		query's targetlist; that is the expression to be sorted or grouped by.
  * eqop is the OID of the equality operator.
- * sortop is the OID of the ordering operator (a "<" or ">" operator),
+ * sortop is the OID of the ordering operator ('<' op),
  *		or InvalidOid if not available.
  * nulls_first means about what you'd expect.  If sortop is InvalidOid
  *		then nulls_first is meaningless and should be set to false.
@@ -1290,6 +1290,8 @@ typedef struct PGSelectStmt {
 	struct PGNode *larg; /* left child */
 	struct PGNode *rarg; /* right child */
 	                           /* Eventually add fields for CORRESPONDING spec here */
+
+	PGHintStmt* hint;
 } PGSelectStmt;
 
 /* ----------------------
@@ -2235,5 +2237,16 @@ typedef struct PGCommentOnStmt {
 	PGNode *value;				/* the comment: a string or NULL*/
 	PGNode *column_expr;
 } PGCommentOnStmt;
+
+typedef struct PGHintElem {
+    PGNodeTag     type;
+    char*       hint_type;  // 如 "threads"
+    int         value;      // 如 4
+} PGHintElem;
+
+typedef struct PGHintStmt {
+    PGNodeTag     type;
+    PGList*       hints;      // List of PGHintElem
+} PGHintStmt;
 
 }

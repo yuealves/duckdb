@@ -67,6 +67,7 @@
 %type <list> stmtmulti
 {{{ TYPES }}}
 
+
 /*
  * Non-keyword token types.  These are hard-wired into the "flex" lexer.
  * They must be listed first so that their numeric codes do not depend on
@@ -80,6 +81,7 @@
 %token <ival>	ICONST PARAM
 %token			TYPECAST DOT_DOT COLON_EQUALS EQUALS_GREATER INTEGER_DIVISION POWER_OF LAMBDA_ARROW DOUBLE_ARROW
 %token			LESS_EQUALS GREATER_EQUALS NOT_EQUALS
+%token HINT_START HINT_END HINT_LPAREN HINT_RPAREN HINT_COMMA HINT_INTEGER HINT_IDENTIFIER HINT_STAR
 
 /*
  * If you want to make any keyword changes, update the keyword table in
