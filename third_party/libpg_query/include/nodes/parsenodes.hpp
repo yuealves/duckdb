@@ -1240,7 +1240,16 @@ typedef struct PGPivotStmt {
  * ----------------------
  */
 typedef enum PGSetOperation { PG_SETOP_NONE = 0, PG_SETOP_UNION, PG_SETOP_INTERSECT, PG_SETOP_EXCEPT, PG_SETOP_UNION_BY_NAME } PGSetOperation;
+typedef struct PGHintElem {
+    PGNodeTag     type;
+    char*       hint_type;  // 如 "threads"
+    int         value;      // 如 4
+} PGHintElem;
 
+typedef struct PGHint {
+    PGNodeTag     type;
+    PGList*       hints;      // List of PGHintElem
+} PGHint;
 typedef struct PGSelectStmt {
 	PGNodeTag type;
 
@@ -1290,6 +1299,8 @@ typedef struct PGSelectStmt {
 	struct PGNode *larg; /* left child */
 	struct PGNode *rarg; /* right child */
 	                           /* Eventually add fields for CORRESPONDING spec here */
+
+	PGHint* hint;
 } PGSelectStmt;
 
 /* ----------------------
@@ -2235,5 +2246,6 @@ typedef struct PGCommentOnStmt {
 	PGNode *value;				/* the comment: a string or NULL*/
 	PGNode *column_expr;
 } PGCommentOnStmt;
+
 
 }

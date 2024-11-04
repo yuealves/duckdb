@@ -168,6 +168,7 @@ extern void core_yyset_column(int column_no, yyscan_t yyscanner);
 %x xus
 %x xusend
 %x xeu
+%x xhint
 
 /*
  * In order to make the world safe for Windows and Mac clients as well as
@@ -299,6 +300,11 @@ xustop2		{uescape}
 xufailed		[uU]&
 
 
+/* Hint */
+hint_start		"/*+"
+hint_end		"*/"
+hint_space		[ \t\n\r\f]+
+
 /* C-style comments
  *
  * The "extended comment" syntax closely resembles allowable operator syntax.
@@ -317,7 +323,7 @@ xufailed		[uU]&
  *    problem.
  * Dash-dash comments have similar interactions with the operator rule.
  */
-xcstart			\/\*{op_chars}*
+xcstart			"/*"[^+]{op_chars}*|"/*"
 xcstop			\*+\/
 xcinside		[^*/]+
 
@@ -442,6 +448,54 @@ other			.
 				}
 
 <xc><<EOF>>		{ yyerror("unterminated /* comment"); }
+
+{hint_start} {
+	SET_YYLLOC();
+	BEGIN(xhint);
+	return HINT_START;
+}
+
+<xhint>{hint_end} {
+	BEGIN(INITIAL);
+	return HINT_END;
+}
+
+<xhint>{hint_space} {
+	/* ignore */
+}
+
+<xhint>{identifier} {
+	SET_YYLLOC();
+	yylval->str = pstrdup(yytext);
+	return HINT_IDENTIFIER;
+}
+
+<xhint>[0-9]+ {
+    SET_YYLLOC();
+    yylval->ival = atol(yytext);
+    return HINT_INTEGER;
+}
+
+<xhint>"(" {	
+	return HINT_LPAREN;
+}
+
+<xhint>")" {
+	return HINT_RPAREN;
+}
+
+<xhint>"," {
+	return HINT_COMMA;
+}
+
+<xhint>. {
+    /* 捕获任何其他未匹配的字符并报错 */
+    yyerror("invalid character in hint");
+}
+
+<xhint><<EOF>> {
+    yyerror("unterminated hint comment");
+}
 
 {xbstart}		{
 					/* Binary bit type.

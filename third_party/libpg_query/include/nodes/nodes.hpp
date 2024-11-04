@@ -522,7 +522,13 @@ typedef enum PGNodeTag {
 	T_PGFdwRoutine,         /* in foreign/fdwapi.h */
 	T_PGIndexAmRoutine,     /* in access/amapi.h */
 	T_PGTsmRoutine,         /* in access/tsmapi.h */
-	T_PGForeignKeyCacheInfo /* in utils/rel.h */
+	T_PGForeignKeyCacheInfo, /* in utils/rel.h */
+
+	/*
+	 * TAGS FOR HINT
+	 */
+	T_PGHint,
+	T_PGHintElem,
 } PGNodeTag;
 
 /*

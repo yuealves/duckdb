@@ -167,22 +167,28 @@ opt_select:
 			}
 	;
 
+opt_hint_clause:
+		HintStmt { $$ = $1;}
+		| /* empty */ { $$ = NULL; }
+		;
+
 
 simple_select:
-			SELECT opt_all_clause opt_target_list_opt_comma
+			SELECT opt_hint_clause opt_all_clause opt_target_list_opt_comma
 			into_clause from_clause where_clause
 			group_clause having_clause window_clause qualify_clause sample_clause
 				{
 					PGSelectStmt *n = makeNode(PGSelectStmt);
-					n->targetList = $3;
-					n->intoClause = $4;
-					n->fromClause = $5;
-					n->whereClause = $6;
-					n->groupClause = $7;
-					n->havingClause = $8;
-					n->windowClause = $9;
-					n->qualifyClause = $10;
-					n->sampleOptions = $11;
+					n->hint = (PGHint*)$2;
+					n->targetList = $4;
+					n->intoClause = $5;
+					n->fromClause = $6;
+					n->whereClause = $7;
+					n->groupClause = $8;
+					n->havingClause = $9;
+					n->windowClause = $10;
+					n->qualifyClause = $11;
+					n->sampleOptions = $12;
 					$$ = (PGNode *)n;
 				}
 			| SELECT distinct_clause target_list_opt_comma

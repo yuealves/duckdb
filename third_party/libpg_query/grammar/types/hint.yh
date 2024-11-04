@@ -1,0 +1,4 @@
+%type <node> HintElem
+%type <list> HintList
+%type <str> HINT_IDENTIFIER
+%type <ival> HINT_INTEGER
