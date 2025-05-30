@@ -418,145 +418,68 @@ static void FilterSelectionSwitch(UnifiedVectorFormat &vdata, T predicate, Selec
 	sel.Initialize(new_sel);
 }
 
+template<class T>
+static void BindexScanLessThan(T predicate,ConstantFilter& constant_filter,shared_ptr<BindexBase> bindex){
+	if( constant_filter.rowgroup_bitmap[bindex->row_group_id].size() == 0 ){
+		shared_ptr<Bindex<T>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<T>>(bindex);
+		bindex_ptr->scanLessThan(predicate,constant_filter.rowgroup_bitmap[bindex_ptr->row_group_id]);
+	}
+}
+
+
 template <class T>
 static void FilterSelectionSwitchBindex(UnifiedVectorFormat &vdata, T predicate, SelectionVector &sel,
                                   idx_t &approved_tuple_count, ExpressionType comparison_type,
 								  ConstantFilter& constant_filter, shared_ptr<BindexBase> bindex,idx_t vector_index ) {
 	SelectionVector new_sel(approved_tuple_count);
-	//auto &mask = vdata.validity;
-	// the inplace loops take the result as the last parameter
+	
 	switch (comparison_type) {
-	case ExpressionType::COMPARE_LESSTHAN: {
-
-		approved_tuple_count = 0;
-		shared_ptr<Bindex<int64_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<int64_t>>(bindex);
-		if( constant_filter.rowgroup_bitmap[bindex_ptr->row_group_id].size() == 0 ){
-			bindex_ptr->scanLessThan(predicate,constant_filter.rowgroup_bitmap[bindex_ptr->row_group_id]);
-		}
-
-		vector<uint64_t>& bitmap = constant_filter.rowgroup_bitmap[bindex_ptr->row_group_id] ;
-
-		idx_t pos = STANDARD_VECTOR_SIZE / 64 * vector_index;
-		//std::cout << pos << " : " << pos+4 << " : " << draft.vector_drafts.size() << std::endl ;
-		if(  pos + STANDARD_VECTOR_SIZE / 64  <= bitmap.size()  ){     // warning : 32
-			uint64_t* bitset = bitmap.data() + pos;
-
-			union U {
-				__m256i vec;
-				unsigned long arr[4];
-			} u;
-
-			idx_t num_entries = STANDARD_VECTOR_SIZE / 256;
-			for (idx_t i = 0; i < num_entries; ++i) {
-				u.vec = _mm256_loadu_si256((__m256i *)(bitset + i * 4));
-				for (idx_t k = 0; k < 4; ++k) {
-					unsigned long chunk = u.arr[k];
-					while (chunk) {
-						unsigned long bit_index = _tzcnt_u64(chunk);
-						idx_t bit_pos = i * 256 + k * 64 + bit_index;
-						
-						new_sel.set_index(approved_tuple_count,bit_pos);
-						//std::cout <<"from simd bitmap: " << bit_pos << std::endl;
-						approved_tuple_count++;
-						
-						chunk &= chunk - 1; // Clear the first set bit
-					}
-				}
-			}
-		}else{
-			for(idx_t i = 0 ; i < STANDARD_VECTOR_SIZE ;i++){
-				idx_t rowid = STANDARD_VECTOR_SIZE*vector_index + i;
-				idx_t entry_idx = rowid / 64;
-				idx_t idx_in_entry = rowid % 64;
-				if( entry_idx >= bitmap.size() ) break;
-				if( bitmap[entry_idx] & (1UL << idx_in_entry) ){
-					//std::cout <<"from norm bitmap: " << i  << std::endl;
-					new_sel.set_index(approved_tuple_count,i);
-					approved_tuple_count++;
-				}
-			}
-		}
-
-		/*
-		// only do less than now! 
-		
-		//std::cout <<"read sel from : " <<  bindex->getInfo() << std::endl;
-		//std::cout << "now vector index: " << vector_index << std::endl;
-		if( constant_filter.rowgroup_drafts.count(bindex->row_group_id) == 0 ){
-			constant_filter.rowgroup_drafts[bindex->row_group_id] = RowGroupRraft();
-			bindex->scanLessThan(predicate,constant_filter.rowgroup_drafts[bindex->row_group_id].vector_sels,
-											constant_filter.rowgroup_drafts[bindex->row_group_id].vector_drafts);
-		}
-		if(sel.data() != nullptr){
-			std::cout << "[warning] error occor!" << std::endl;
-		}
-		sel.Initialize(STANDARD_VECTOR_SIZE);
-		RowGroupRraft& draft = constant_filter.rowgroup_drafts[bindex->row_group_id] ;
-		approved_tuple_count = draft.vector_sels[vector_index].size();
-		for(idx_t i = 0 ; i < approved_tuple_count ; i++){
-			//idx_t id_in_vector = draft.vector_sels[vector_index][i] ;
-			//std::cout <<"from pos: " << id_in_vector << ": " 
-			//<< bindex->raw_data[ vector_index*STANDARD_VECTOR_SIZE +id_in_vector ].key << std::endl;
-			sel.set_index(i,draft.vector_sels[vector_index][i]);
+		case ExpressionType::COMPARE_LESSTHAN: {
+			BindexScanLessThan<T>(predicate,constant_filter,bindex);
+			break;
 		}
 		
-		
-		//for(idx_t i = 0 ; i < approved_tuple_count ; i++){
-		//	idx_t id_in_vector = sel.get_index(i) ;
-		//	std::cout <<"after filter: " << id_in_vector << ": " 
-		//	<< bindex->raw_data[ vector_index*STANDARD_VECTOR_SIZE +id_in_vector ].key << std::endl;
-		//}
-
-		idx_t pos = STANDARD_VECTOR_SIZE * vector_index / 64;
-		//std::cout << pos << " : " << pos+4 << " : " << draft.vector_drafts.size() << std::endl ;
-		if(  pos + STANDARD_VECTOR_SIZE/32  <= draft.vector_drafts.size()  ){  //pos + 4 <= draft.vector_drafts.size()
-			uint64_t* bitset = draft.vector_drafts.data() + pos;
-
-			union U {
-				__m256i vec;
-				unsigned long arr[4];
-			} u;
-
-			idx_t num_entries = STANDARD_VECTOR_SIZE / 256;
-			for (idx_t i = 0; i < num_entries; ++i) {
-				u.vec = _mm256_loadu_si256((__m256i *)(bitset + i * 4));
-				for (idx_t k = 0; k < 4; ++k) {
-					unsigned long chunk = u.arr[k];
-					while (chunk) {
-						unsigned long bit_index = _tzcnt_u64(chunk);
-						idx_t bit_pos = i * 256 + k * 64 + bit_index;
-						
-						new_sel.set_index(approved_tuple_count,bit_pos);
-						//std::cout <<"from simd bitmap: " << bit_pos << std::endl;
-						approved_tuple_count++;
-						
-						chunk &= chunk - 1; // Clear the first set bit
-					}
-				}
-			}
-		}else{
-			for(idx_t i = 0 ; i < STANDARD_VECTOR_SIZE ;i++){
-				idx_t rowid = STANDARD_VECTOR_SIZE*vector_index + i;
-				idx_t entry_idx = rowid / 64;
-				idx_t idx_in_entry = rowid % 64;
-				if( entry_idx >= draft.vector_drafts.size() ) break;
-				if( draft.vector_drafts[entry_idx] & (1UL << idx_in_entry) ){
-					//std::cout <<"from norm bitmap: " << i  << std::endl;
-					new_sel.set_index(approved_tuple_count,i);
-					approved_tuple_count++;
-				}
-			}
-		}
-
-		//std::cout << std::endl;
-		*/
-		break;
+		default:
+			throw NotImplementedException("Unknown comparison type for filter pushed down to table!");
 	}
 	
-	default:
-		throw NotImplementedException("Unknown comparison type for filter pushed down to table!");
+	approved_tuple_count = 0;
+	shared_ptr<Bindex<T>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<T>>(bindex);
+	vector<uint64_t>& bitmap = constant_filter.rowgroup_bitmap[bindex_ptr->row_group_id] ;
+	idx_t pos = STANDARD_VECTOR_SIZE / 64 * vector_index;
+	if(  pos + STANDARD_VECTOR_SIZE / 64  <= bitmap.size()  ){    
+		uint64_t* bitset = bitmap.data() + pos;
+		union U {
+			__m256i vec;
+			unsigned long arr[4];
+		} u;
+		idx_t num_entries = STANDARD_VECTOR_SIZE / 256;
+		for (idx_t i = 0; i < num_entries; ++i) {
+			u.vec = _mm256_loadu_si256((__m256i *)(bitset + i * 4));
+			for (idx_t k = 0; k < 4; ++k) {
+				unsigned long chunk = u.arr[k];
+				while (chunk) {
+					unsigned long bit_index = _tzcnt_u64(chunk);
+					idx_t bit_pos = i * 256 + k * 64 + bit_index;
+					new_sel.set_index(approved_tuple_count,bit_pos);
+					approved_tuple_count++;
+					chunk &= chunk - 1; 
+				}
+			}
+		}
+	}else{
+		for(idx_t i = 0 ; i < STANDARD_VECTOR_SIZE ;i++){
+			idx_t rowid = STANDARD_VECTOR_SIZE*vector_index + i;
+			idx_t entry_idx = rowid / 64;
+			idx_t idx_in_entry = rowid % 64;
+			if( entry_idx >= bitmap.size() ) break;
+			if( bitmap[entry_idx] & (1UL << idx_in_entry) ){
+				new_sel.set_index(approved_tuple_count,i);
+				approved_tuple_count++;
+			}
+		}
 	}
-	
+
 	sel.Initialize(new_sel);
 }
 
@@ -857,10 +780,44 @@ idx_t ColumnSegment::FilterSelectionBindex(SelectionVector &sel, Vector &vector,
 		auto &constant_filter = filter.Cast<ConstantFilter>();
 		// the inplace loops take the result as the last parameter
 		switch (vector.GetType().InternalType()) {
+		case PhysicalType::UINT16: {
+			auto predicate = USmallIntValue::Get(constant_filter.constant);
+			FilterSelectionSwitchBindex<uint16_t>(vdata, predicate, sel, approved_tuple_count,constant_filter.comparison_type,constant_filter,bindex,vector_index);
+			break;
+		}
+		case PhysicalType::UINT32: {
+			auto predicate = UIntegerValue::Get(constant_filter.constant);
+			FilterSelectionSwitchBindex<uint32_t>(vdata, predicate, sel, approved_tuple_count,constant_filter.comparison_type,constant_filter,bindex,vector_index);
+			break;
+		}
+		case PhysicalType::UINT64: {
+			auto predicate = UBigIntValue::Get(constant_filter.constant);
+			FilterSelectionSwitchBindex<uint64_t>(vdata, predicate, sel, approved_tuple_count,constant_filter.comparison_type,constant_filter,bindex,vector_index);
+			break;
+		}
+		case PhysicalType::INT16: {
+			auto predicate = SmallIntValue::Get(constant_filter.constant);
+			FilterSelectionSwitchBindex<int16_t>(vdata, predicate, sel, approved_tuple_count,constant_filter.comparison_type,constant_filter,bindex,vector_index);
+			break;
+		}
+		case PhysicalType::INT32: {
+			auto predicate = IntegerValue::Get(constant_filter.constant);
+			FilterSelectionSwitchBindex<int32_t>(vdata, predicate, sel, approved_tuple_count,constant_filter.comparison_type,constant_filter,bindex,vector_index);
+			break;
+		}
 		case PhysicalType::INT64: {
 			auto predicate = BigIntValue::Get(constant_filter.constant);
-			FilterSelectionSwitchBindex<int64_t>(vdata, predicate, sel, approved_tuple_count,
-			                               constant_filter.comparison_type,constant_filter,bindex,vector_index);
+			FilterSelectionSwitchBindex<int64_t>(vdata, predicate, sel, approved_tuple_count,constant_filter.comparison_type,constant_filter,bindex,vector_index);
+			break;
+		}
+		case PhysicalType::FLOAT: {
+			auto predicate = FloatValue::Get(constant_filter.constant);
+			FilterSelectionSwitchBindex<float>(vdata, predicate, sel, approved_tuple_count,constant_filter.comparison_type,constant_filter,bindex,vector_index);
+			break;
+		}
+		case PhysicalType::DOUBLE: {
+			auto predicate = DoubleValue::Get(constant_filter.constant);
+			FilterSelectionSwitchBindex<double>(vdata, predicate, sel, approved_tuple_count,constant_filter.comparison_type,constant_filter,bindex,vector_index);
 			break;
 		}
 		default:

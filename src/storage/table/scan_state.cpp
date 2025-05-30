@@ -218,48 +218,131 @@ bool CollectionScanState::ScanCommitted(DataChunk &result, TableScanType type) {
 	return false;
 }
 
+template<typename KeyType>
+static void BindexInputData(DataChunk& result, RowGroup* row_group,string tablename,uint64_t col_idx,std::thread::id this_id ){
+
+	//std::cout << "result size: " << result.size() << std::endl;
+	if( row_group->bound_bindex == nullptr ){
+		row_group->bound_bindex = make_shared_ptr<Bindex<KeyType>>();
+		shared_ptr<Bindex<KeyType>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<KeyType>>(row_group->bound_bindex);
+		bindex_ptr->Init(tablename,col_idx,row_group->index) ;
+		row_group->bound_bindex->create_tid = this_id;
+		//std::cout << "tid : " << this_id  <<  " create index for rowgroup : " << row_group->index << std::endl; 
+	}
+	if( row_group->bound_bindex->finish_read == true){
+		//result.Reset();
+		//std::cout << "[error] rowgroup : " << row_group->index  << " index has created" << std::endl; 
+		return ;  
+	}
+	UnifiedVectorFormat data0;
+	result.data[0].ToUnifiedFormat(result.size(), data0);
+	auto input_data0 = UnifiedVectorFormat::GetData<KeyType>(data0);
+
+	// row id 
+	UnifiedVectorFormat data1;
+	result.data[1].ToUnifiedFormat(result.size(), data1);
+	auto input_data1 = UnifiedVectorFormat::GetData<int64_t>(data1);	
+
+	shared_ptr<Bindex<KeyType>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<KeyType>>(row_group->bound_bindex);
+	for(idx_t  i = 0 ; i < result.size() ; i++){
+		bindex_ptr->insertPair(input_data0[i],input_data1[i] - (row_group->index*122880) );
+	}
+}
+
+
 bool CollectionScanState::ScanCommittedBindex(DataChunk &result, TableScanType type) {
 	std::thread::id this_id = std::this_thread::get_id();
 	//std::cout << "enter scan commmit bindex" << std::endl;
 	while (row_group) {
 		row_group->ScanCommitted(*this, result, type);
 		if (result.size() > 0) {
-			//std::cout << "result size: " << result.size() << std::endl;
-			if( row_group->bound_bindex == nullptr ){
-				row_group->bound_bindex = make_shared_ptr<Bindex<int64_t>>();
-			
-				shared_ptr<Bindex<int64_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<int64_t>>(row_group->bound_bindex);
-				bindex_ptr->Init(row_groups->getTableName(),GetColumnIds()[0],row_group->index) ;
-			
-				row_group->bound_bindex->create_tid = this_id;
-				//std::cout << "tid : " << this_id  <<  " create index for rowgroup : " << row_group->index << std::endl; 
+			switch (result.data[0].GetType().InternalType()){
+				case PhysicalType::UINT16: {
+					BindexInputData<uint16_t>(result,row_group,row_groups->getTableName(),GetColumnIds()[0],this_id);
+					break;
+				}
+				case PhysicalType::UINT32: {
+					BindexInputData<uint32_t>(result,row_group,row_groups->getTableName(),GetColumnIds()[0],this_id);
+					break;
+				}
+				case PhysicalType::UINT64: {
+					BindexInputData<uint64_t>(result,row_group,row_groups->getTableName(),GetColumnIds()[0],this_id);
+					break;
+				}
+				case PhysicalType::INT16: {
+					BindexInputData<int16_t>(result,row_group,row_groups->getTableName(),GetColumnIds()[0],this_id);
+					break;
+				}
+				case PhysicalType::INT32: {
+					BindexInputData<int32_t>(result,row_group,row_groups->getTableName(),GetColumnIds()[0],this_id);
+					break;
+				}
+				case PhysicalType::INT64: {
+					BindexInputData<int64_t>(result,row_group,row_groups->getTableName(),GetColumnIds()[0],this_id);
+					break;
+				}
+				case PhysicalType::FLOAT: {
+					BindexInputData<float>(result,row_group,row_groups->getTableName(),GetColumnIds()[0],this_id);
+					break;
+				}
+				case PhysicalType::DOUBLE: {
+					BindexInputData<double>(result,row_group,row_groups->getTableName(),GetColumnIds()[0],this_id);
+					break;
+				}
+				default:
+					std::cout << " no match type when input bindex data" << std::endl;
+					return false;
 			}
-			if( row_group->bound_bindex->finish_read == true){
-				//result.Reset();
-				//std::cout << "[error] rowgroup : " << row_group->index  << " index has created" << std::endl; 
-				return true;  
-			}
-			UnifiedVectorFormat data0;
-			result.data[0].ToUnifiedFormat(result.size(), data0);
-			auto input_data0 = UnifiedVectorFormat::GetData<int64_t>(data0);
-
-			UnifiedVectorFormat data1;
-			result.data[1].ToUnifiedFormat(result.size(), data1);
-			auto input_data1 = UnifiedVectorFormat::GetData<int64_t>(data1);
-
-			shared_ptr<Bindex<int64_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<int64_t>>(row_group->bound_bindex);
-			for(idx_t  i = 0 ; i < result.size() ; i++){
-				bindex_ptr->insertPair(input_data0[i],input_data1[i] - (row_group->index*122880) );
-			}
-			//result.Reset();
-			//std::cout << "row group : " << row_group->index  << " read bindex data " << std::endl;
 			return true;
 		} else {
 			if( row_group->bound_bindex != nullptr && row_group->bound_bindex->finish_read == false
 				&& this_id == row_group->bound_bindex->create_tid ){
 				row_group->bound_bindex->finish_read = true;
-				shared_ptr<Bindex<int64_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<int64_t>>(row_group->bound_bindex);
-				bindex_ptr->buildBindex(2048);
+				switch (result.data[0].GetType().InternalType()){
+					case PhysicalType::UINT16: {
+						shared_ptr<Bindex<uint16_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<uint16_t>>(row_group->bound_bindex);
+						bindex_ptr->buildBindex(2048);
+						break;
+					}
+					case PhysicalType::UINT32: {
+						shared_ptr<Bindex<uint32_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<uint32_t>>(row_group->bound_bindex);
+						bindex_ptr->buildBindex(2048);
+						break;
+					}
+					case PhysicalType::UINT64: {
+						shared_ptr<Bindex<uint64_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<uint64_t>>(row_group->bound_bindex);
+						bindex_ptr->buildBindex(2048);
+						break;
+					}
+					case PhysicalType::INT16: {
+						shared_ptr<Bindex<int16_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<int16_t>>(row_group->bound_bindex);
+						bindex_ptr->buildBindex(2048);
+						break;
+					}
+					case PhysicalType::INT32: {
+						shared_ptr<Bindex<int32_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<int32_t>>(row_group->bound_bindex);
+						bindex_ptr->buildBindex(2048);
+						break;
+					}
+					case PhysicalType::INT64: {
+						shared_ptr<Bindex<int64_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<int64_t>>(row_group->bound_bindex);
+						bindex_ptr->buildBindex(2048);
+						break;
+					}
+					case PhysicalType::FLOAT: {
+						shared_ptr<Bindex<float>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<float>>(row_group->bound_bindex);
+						bindex_ptr->buildBindex(2048);
+						break;
+					}
+					case PhysicalType::DOUBLE: {
+						shared_ptr<Bindex<double>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<double>>(row_group->bound_bindex);
+						bindex_ptr->buildBindex(2048);
+						break;
+					}
+					default:
+						std::cout << " no match type when build bindex " << std::endl;
+						return false;
+				}
 				//std::cout << row_group->bound_bindex->getInfo() << std::endl;
 			}
 
