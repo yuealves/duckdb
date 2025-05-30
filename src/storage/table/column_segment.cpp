@@ -421,7 +421,7 @@ static void FilterSelectionSwitch(UnifiedVectorFormat &vdata, T predicate, Selec
 template <class T>
 static void FilterSelectionSwitchBindex(UnifiedVectorFormat &vdata, T predicate, SelectionVector &sel,
                                   idx_t &approved_tuple_count, ExpressionType comparison_type,
-								  ConstantFilter& constant_filter, shared_ptr<Bindex> bindex,idx_t vector_index ) {
+								  ConstantFilter& constant_filter, shared_ptr<BindexBase> bindex,idx_t vector_index ) {
 	SelectionVector new_sel(approved_tuple_count);
 	//auto &mask = vdata.validity;
 	// the inplace loops take the result as the last parameter
@@ -429,11 +429,12 @@ static void FilterSelectionSwitchBindex(UnifiedVectorFormat &vdata, T predicate,
 	case ExpressionType::COMPARE_LESSTHAN: {
 
 		approved_tuple_count = 0;
-		if( constant_filter.rowgroup_bitmap[bindex->row_group_id].size() == 0 ){
-			bindex->scanLessThan(predicate,constant_filter.rowgroup_bitmap[bindex->row_group_id]);
+		shared_ptr<Bindex> bindex_ptr = shared_ptr_cast<BindexBase,Bindex>(bindex);
+		if( constant_filter.rowgroup_bitmap[bindex_ptr->row_group_id].size() == 0 ){
+			bindex_ptr->scanLessThan(predicate,constant_filter.rowgroup_bitmap[bindex_ptr->row_group_id]);
 		}
 
-		vector<uint64_t>& bitmap = constant_filter.rowgroup_bitmap[bindex->row_group_id] ;
+		vector<uint64_t>& bitmap = constant_filter.rowgroup_bitmap[bindex_ptr->row_group_id] ;
 
 		idx_t pos = STANDARD_VECTOR_SIZE / 64 * vector_index;
 		//std::cout << pos << " : " << pos+4 << " : " << draft.vector_drafts.size() << std::endl ;
@@ -843,7 +844,7 @@ idx_t ColumnSegment::FilterSelection(SelectionVector &sel, Vector &vector, Unifi
 
 idx_t ColumnSegment::FilterSelectionBindex(SelectionVector &sel, Vector &vector, UnifiedVectorFormat &vdata,
                                      TableFilter &filter, idx_t scan_count,
-									 idx_t &approved_tuple_count , shared_ptr<Bindex> bindex ,idx_t vector_index) {
+									 idx_t &approved_tuple_count , shared_ptr<BindexBase> bindex ,idx_t vector_index) {
 	switch (filter.filter_type) {
 	case TableFilterType::CONJUNCTION_AND: {
 		auto &conjunction_and = filter.Cast<ConjunctionAndFilter>();

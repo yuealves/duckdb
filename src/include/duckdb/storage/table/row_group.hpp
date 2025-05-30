@@ -87,7 +87,7 @@ private:
 
 public:
 
-	shared_ptr<Bindex> bound_bindex;
+	shared_ptr<BindexBase> bound_bindex;
 
 	void MoveToCollection(RowGroupCollection &collection, idx_t new_start);
 	RowGroupCollection &GetCollection() {

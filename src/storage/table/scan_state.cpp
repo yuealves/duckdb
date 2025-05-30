@@ -10,6 +10,7 @@
 
 #include <iostream>
 #include <thread>
+#include <memory>
 
 namespace duckdb {
 
@@ -226,9 +227,10 @@ bool CollectionScanState::ScanCommittedBindex(DataChunk &result, TableScanType t
 			//std::cout << "result size: " << result.size() << std::endl;
 			if( row_group->bound_bindex == nullptr ){
 				row_group->bound_bindex = make_shared_ptr<Bindex>();
-				row_group->bound_bindex->Init(
-					row_groups->getTableName(),GetColumnIds()[0],row_group->index
-				);
+			
+				shared_ptr<Bindex> bindex_ptr = shared_ptr_cast<BindexBase,Bindex>(row_group->bound_bindex);
+				bindex_ptr->Init(row_groups->getTableName(),GetColumnIds()[0],row_group->index) ;
+			
 				row_group->bound_bindex->create_tid = this_id;
 				//std::cout << "tid : " << this_id  <<  " create index for rowgroup : " << row_group->index << std::endl; 
 			}
@@ -245,8 +247,9 @@ bool CollectionScanState::ScanCommittedBindex(DataChunk &result, TableScanType t
 			result.data[1].ToUnifiedFormat(result.size(), data1);
 			auto input_data1 = UnifiedVectorFormat::GetData<int64_t>(data1);
 
+			shared_ptr<Bindex> bindex_ptr = shared_ptr_cast<BindexBase,Bindex>(row_group->bound_bindex);
 			for(idx_t  i = 0 ; i < result.size() ; i++){
-				row_group->bound_bindex->insertPair(input_data0[i],input_data1[i] - (row_group->index*122880) );
+				bindex_ptr->insertPair(input_data0[i],input_data1[i] - (row_group->index*122880) );
 			}
 			//result.Reset();
 			//std::cout << "row group : " << row_group->index  << " read bindex data " << std::endl;
@@ -255,7 +258,8 @@ bool CollectionScanState::ScanCommittedBindex(DataChunk &result, TableScanType t
 			if( row_group->bound_bindex != nullptr && row_group->bound_bindex->finish_read == false
 				&& this_id == row_group->bound_bindex->create_tid ){
 				row_group->bound_bindex->finish_read = true;
-				row_group->bound_bindex->buildBindex(60);
+				shared_ptr<Bindex> bindex_ptr = shared_ptr_cast<BindexBase,Bindex>(row_group->bound_bindex);
+				bindex_ptr->buildBindex(2048);
 				//std::cout << row_group->bound_bindex->getInfo() << std::endl;
 			}
 

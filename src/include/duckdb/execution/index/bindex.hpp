@@ -14,6 +14,13 @@
 
 namespace duckdb{
 
+class BindexBase{
+public:
+    bool finish_read;
+    std::thread::id create_tid;
+
+};
+
 class BindexPair{
 public:
     int64_t key;
@@ -26,14 +33,13 @@ public:
 };
 
 
-class Bindex{
+class Bindex : public BindexBase{
 public:
 
     string table_name;
     idx_t key_column_id;
     idx_t row_group_id;
-    bool finish_read;
-    std::thread::id create_tid;
+    
 
     vector<BindexPair>  raw_data;
     vector<int64_t> raw_data_key;

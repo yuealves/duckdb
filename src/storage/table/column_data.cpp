@@ -308,7 +308,7 @@ void ColumnData::Select(TransactionData transaction, idx_t vector_index, ColumnS
 }
 
 void ColumnData::SelectBindex(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
-                        SelectionVector &sel, idx_t &s_count, TableFilter &filter ,shared_ptr<Bindex> bindex ) {	
+                        SelectionVector &sel, idx_t &s_count, TableFilter &filter ,shared_ptr<BindexBase> bindex ) {	
 	//idx_t scan_count = Scan(transaction, vector_index, state, result);
 	idx_t scan_count = s_count;
 
