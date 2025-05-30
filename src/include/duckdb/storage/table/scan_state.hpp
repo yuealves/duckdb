@@ -37,7 +37,8 @@ class RowGroupSegmentTree;
 class TableFilter;
 struct AdaptiveFilterState;
 struct TableScanOptions;
-class Bindex;
+class BindexBase;
+template <typename KeyType> class Bindex;
 
 struct SegmentScanState {
 	virtual ~SegmentScanState() {

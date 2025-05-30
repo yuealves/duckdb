@@ -226,9 +226,9 @@ bool CollectionScanState::ScanCommittedBindex(DataChunk &result, TableScanType t
 		if (result.size() > 0) {
 			//std::cout << "result size: " << result.size() << std::endl;
 			if( row_group->bound_bindex == nullptr ){
-				row_group->bound_bindex = make_shared_ptr<Bindex>();
+				row_group->bound_bindex = make_shared_ptr<Bindex<int64_t>>();
 			
-				shared_ptr<Bindex> bindex_ptr = shared_ptr_cast<BindexBase,Bindex>(row_group->bound_bindex);
+				shared_ptr<Bindex<int64_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<int64_t>>(row_group->bound_bindex);
 				bindex_ptr->Init(row_groups->getTableName(),GetColumnIds()[0],row_group->index) ;
 			
 				row_group->bound_bindex->create_tid = this_id;
@@ -247,7 +247,7 @@ bool CollectionScanState::ScanCommittedBindex(DataChunk &result, TableScanType t
 			result.data[1].ToUnifiedFormat(result.size(), data1);
 			auto input_data1 = UnifiedVectorFormat::GetData<int64_t>(data1);
 
-			shared_ptr<Bindex> bindex_ptr = shared_ptr_cast<BindexBase,Bindex>(row_group->bound_bindex);
+			shared_ptr<Bindex<int64_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<int64_t>>(row_group->bound_bindex);
 			for(idx_t  i = 0 ; i < result.size() ; i++){
 				bindex_ptr->insertPair(input_data0[i],input_data1[i] - (row_group->index*122880) );
 			}
@@ -258,7 +258,7 @@ bool CollectionScanState::ScanCommittedBindex(DataChunk &result, TableScanType t
 			if( row_group->bound_bindex != nullptr && row_group->bound_bindex->finish_read == false
 				&& this_id == row_group->bound_bindex->create_tid ){
 				row_group->bound_bindex->finish_read = true;
-				shared_ptr<Bindex> bindex_ptr = shared_ptr_cast<BindexBase,Bindex>(row_group->bound_bindex);
+				shared_ptr<Bindex<int64_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<int64_t>>(row_group->bound_bindex);
 				bindex_ptr->buildBindex(2048);
 				//std::cout << row_group->bound_bindex->getInfo() << std::endl;
 			}

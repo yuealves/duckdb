@@ -429,7 +429,7 @@ static void FilterSelectionSwitchBindex(UnifiedVectorFormat &vdata, T predicate,
 	case ExpressionType::COMPARE_LESSTHAN: {
 
 		approved_tuple_count = 0;
-		shared_ptr<Bindex> bindex_ptr = shared_ptr_cast<BindexBase,Bindex>(bindex);
+		shared_ptr<Bindex<int64_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<int64_t>>(bindex);
 		if( constant_filter.rowgroup_bitmap[bindex_ptr->row_group_id].size() == 0 ){
 			bindex_ptr->scanLessThan(predicate,constant_filter.rowgroup_bitmap[bindex_ptr->row_group_id]);
 		}
