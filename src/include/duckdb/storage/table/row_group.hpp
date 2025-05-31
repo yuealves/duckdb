@@ -87,7 +87,7 @@ private:
 
 public:
 
-	shared_ptr<BindexBase> bound_bindex;
+	vector<shared_ptr<BindexBase>> bound_bindex;   //NOTE:  max col_idx is 100 now !!
 
 	void MoveToCollection(RowGroupCollection &collection, idx_t new_start);
 	RowGroupCollection &GetCollection() {

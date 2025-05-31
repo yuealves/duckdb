@@ -27,12 +27,16 @@ namespace duckdb {
 
 RowGroup::RowGroup(RowGroupCollection &collection_p, idx_t start, idx_t count)
     : SegmentBase<RowGroup>(start, count), collection(collection_p), version_info(nullptr), allocation_size(0) {
+	bound_bindex.resize(100);
+
 	Verify();
 }
 
 RowGroup::RowGroup(RowGroupCollection &collection_p, RowGroupPointer pointer)
     : SegmentBase<RowGroup>(pointer.row_start, pointer.tuple_count), collection(collection_p), version_info(nullptr),
       allocation_size(0) {
+	bound_bindex.resize(100);
+
 	// deserialize the columns
 	if (pointer.data_pointers.size() != collection_p.GetTypes().size()) {
 		throw IOException("Row group column count is unaligned with table column count. Corrupt file?");
@@ -52,6 +56,8 @@ RowGroup::RowGroup(RowGroupCollection &collection_p, RowGroupPointer pointer)
 RowGroup::RowGroup(RowGroupCollection &collection_p, PersistentRowGroupData &data)
     : SegmentBase<RowGroup>(data.start, data.count), collection(collection_p), version_info(nullptr),
       allocation_size(0) {
+	bound_bindex.resize(100);
+
 	auto &block_manager = GetBlockManager();
 	auto &info = GetTableInfo();
 	auto &types = collection.get().GetTypes();
@@ -596,7 +602,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 					auto &col_data = GetColumn(filter.table_column_index);
 					col_data.SelectBindex(transaction, state.vector_index, state.column_scans[scan_idx],
 									result.data[scan_idx], sel, approved_tuple_count, 
-									filter.filter,state.row_group->bound_bindex);
+									filter.filter,state.row_group->bound_bindex[filter.table_column_index]);
 
 				}else{
 					for (idx_t i = 0; i < filter_list.size(); i++) {

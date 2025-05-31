@@ -222,14 +222,14 @@ template<typename KeyType>
 static void BindexInputData(DataChunk& result, RowGroup* row_group,string tablename,uint64_t col_idx,std::thread::id this_id ){
 
 	//std::cout << "result size: " << result.size() << std::endl;
-	if( row_group->bound_bindex == nullptr ){
-		row_group->bound_bindex = make_shared_ptr<Bindex<KeyType>>();
-		shared_ptr<Bindex<KeyType>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<KeyType>>(row_group->bound_bindex);
+	if( row_group->bound_bindex[col_idx] == nullptr ){
+		row_group->bound_bindex[col_idx] = make_shared_ptr<Bindex<KeyType>>();
+		shared_ptr<Bindex<KeyType>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<KeyType>>(row_group->bound_bindex[col_idx]);
 		bindex_ptr->Init(tablename,col_idx,row_group->index) ;
-		row_group->bound_bindex->create_tid = this_id;
+		row_group->bound_bindex[col_idx]->create_tid = this_id;
 		//std::cout << "tid : " << this_id  <<  " create index for rowgroup : " << row_group->index << std::endl; 
 	}
-	if( row_group->bound_bindex->finish_read == true){
+	if( row_group->bound_bindex[col_idx]->finish_read == true){
 		//result.Reset();
 		//std::cout << "[error] rowgroup : " << row_group->index  << " index has created" << std::endl; 
 		return ;  
@@ -243,7 +243,7 @@ static void BindexInputData(DataChunk& result, RowGroup* row_group,string tablen
 	result.data[1].ToUnifiedFormat(result.size(), data1);
 	auto input_data1 = UnifiedVectorFormat::GetData<int64_t>(data1);	
 
-	shared_ptr<Bindex<KeyType>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<KeyType>>(row_group->bound_bindex);
+	shared_ptr<Bindex<KeyType>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<KeyType>>(row_group->bound_bindex[col_idx]);
 	for(idx_t  i = 0 ; i < result.size() ; i++){
 		bindex_ptr->insertPair(input_data0[i],input_data1[i] - (row_group->index*122880) );
 	}
@@ -252,6 +252,7 @@ static void BindexInputData(DataChunk& result, RowGroup* row_group,string tablen
 
 bool CollectionScanState::ScanCommittedBindex(DataChunk &result, TableScanType type) {
 	std::thread::id this_id = std::this_thread::get_id();
+	idx_t col_idx =  GetColumnIds()[0] ;
 	//std::cout << "enter scan commmit bindex" << std::endl;
 	while (row_group) {
 		row_group->ScanCommitted(*this, result, type);
@@ -295,55 +296,55 @@ bool CollectionScanState::ScanCommittedBindex(DataChunk &result, TableScanType t
 			}
 			return true;
 		} else {
-			if( row_group->bound_bindex != nullptr && row_group->bound_bindex->finish_read == false
-				&& this_id == row_group->bound_bindex->create_tid ){
-				row_group->bound_bindex->finish_read = true;
+			if( row_group->bound_bindex[col_idx] != nullptr && row_group->bound_bindex[col_idx]->finish_read == false
+				&& this_id == row_group->bound_bindex[col_idx]->create_tid ){
+				row_group->bound_bindex[col_idx]->finish_read = true;
 				switch (result.data[0].GetType().InternalType()){
 					case PhysicalType::UINT16: {
 						//std::cout << "build bidex uint16 : " << row_group->index << std::endl;
-						shared_ptr<Bindex<uint16_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<uint16_t>>(row_group->bound_bindex);
+						shared_ptr<Bindex<uint16_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<uint16_t>>(row_group->bound_bindex[col_idx]);
 						bindex_ptr->buildBindex(2048);
 						break;
 					}
 					case PhysicalType::UINT32: {
 						//std::cout << "build bidex uint32 : " << row_group->index << std::endl;
-						shared_ptr<Bindex<uint32_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<uint32_t>>(row_group->bound_bindex);
+						shared_ptr<Bindex<uint32_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<uint32_t>>(row_group->bound_bindex[col_idx]);
 						bindex_ptr->buildBindex(2048);
 						break;
 					}
 					case PhysicalType::UINT64: {
 						//std::cout << "build bidex uint64 : " << row_group->index << std::endl;
-						shared_ptr<Bindex<uint64_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<uint64_t>>(row_group->bound_bindex);
+						shared_ptr<Bindex<uint64_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<uint64_t>>(row_group->bound_bindex[col_idx]);
 						bindex_ptr->buildBindex(2048);
 						break;
 					}
 					case PhysicalType::INT16: {
 						//std::cout << "build bidex int16 : " << row_group->index << std::endl;
-						shared_ptr<Bindex<int16_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<int16_t>>(row_group->bound_bindex);
+						shared_ptr<Bindex<int16_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<int16_t>>(row_group->bound_bindex[col_idx]);
 						bindex_ptr->buildBindex(2048);
 						break;
 					}
 					case PhysicalType::INT32: {
 						//std::cout << "build bidex int32 : " << row_group->index << std::endl;
-						shared_ptr<Bindex<int32_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<int32_t>>(row_group->bound_bindex);
+						shared_ptr<Bindex<int32_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<int32_t>>(row_group->bound_bindex[col_idx]);
 						bindex_ptr->buildBindex(2048);
 						break;
 					}
 					case PhysicalType::INT64: {
 						//std::cout << "build bidex int64 : " << row_group->index << std::endl;
-						shared_ptr<Bindex<int64_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<int64_t>>(row_group->bound_bindex);
+						shared_ptr<Bindex<int64_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<int64_t>>(row_group->bound_bindex[col_idx]);
 						bindex_ptr->buildBindex(2048);
 						break;
 					}
 					case PhysicalType::FLOAT: {
 						//std::cout << "build bidex float : " << row_group->index << std::endl;
-						shared_ptr<Bindex<float>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<float>>(row_group->bound_bindex);
+						shared_ptr<Bindex<float>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<float>>(row_group->bound_bindex[col_idx]);
 						bindex_ptr->buildBindex(2048);
 						break;
 					}
 					case PhysicalType::DOUBLE: {
 						//std::cout << "build bidex double : " << row_group->index << std::endl;
-						shared_ptr<Bindex<double>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<double>>(row_group->bound_bindex);
+						shared_ptr<Bindex<double>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<double>>(row_group->bound_bindex[col_idx]);
 						bindex_ptr->buildBindex(2048);
 						break;
 					}
