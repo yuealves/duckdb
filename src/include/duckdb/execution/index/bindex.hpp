@@ -64,10 +64,19 @@ public:
 
     idx_t scanAreaMapLessThan(KeyType predicate);
     idx_t scanPositionArrayLessThan(KeyType predicate ,idx_t area_idx);
+    idx_t scanAreaMapLessEqual(KeyType predicate);
+    idx_t scanPositionArrayLessEqual(KeyType predicate ,idx_t area_idx);
+
     void copyDraft(idx_t area_idx, vector<uint64_t>& result);
     void refineDraft(idx_t left_pos, idx_t right_pos, vector<uint64_t>& result, bool refineToOne);
-    void scanLessThan(KeyType predicate , vector<uint64_t>& vector_bitmap );  
+    void negationBitmap(vector<uint64_t>& vector_bitmap);
 
+    void scanLessThan(KeyType predicate , vector<uint64_t>& vector_bitmap );  
+    void scanLessEqual(KeyType predicate , vector<uint64_t>& vector_bitmap );  
+    void scanGreaterThan(KeyType predicate, vector<uint64_t>& vector_bitmap );
+    void scanGreaterEqual(KeyType predicate, vector<uint64_t>& vector_bitmap ); 
+    void scanEqual(KeyType predicate, vector<uint64_t>& vector_bitmap);
+    void scanNotEqual(KeyType predicate, vector<uint64_t>& vector_bitmap);
 };
 
 template<typename KeyType>
@@ -182,11 +191,38 @@ idx_t Bindex<KeyType>::scanPositionArrayLessThan(KeyType predicate ,idx_t area_i
     }
 
     auto it = std::lower_bound( position_array.begin() + left , position_array.begin() + right + 1 ,
-                        predicate , [&](const KeyType& rowid , const KeyType& pred)
+                        predicate , [&](const int64_t& rowid , const KeyType& pred)
                                     { return raw_data_key[rowid] < pred;  } ) ;
     
     return ( std::distance(position_array.begin(), it)  - 1 ) ;
 }
+
+template <typename KeyType>
+idx_t Bindex<KeyType>::scanAreaMapLessEqual(KeyType predicate){
+    idx_t i = 0;
+    for( ; i < area_map_lower_bound.size() ;i++){
+        if( predicate < area_map_lower_bound[i]  ){
+            return i;
+        }
+    }
+    return area_map_lower_bound.size() ;
+}
+
+template <typename KeyType>
+idx_t Bindex<KeyType>::scanPositionArrayLessEqual(KeyType predicate ,idx_t area_idx){
+    idx_t left = area_idx * area_size;
+    idx_t right = (area_idx + 1) * area_size - 1;
+    if( right > position_array.size() ){
+        right = position_array.size() - 1;
+    }
+
+    auto it = std::lower_bound( position_array.begin() + left , position_array.begin() + right + 1 ,
+                        predicate , [&](const int64_t& rowid , const KeyType& pred)
+                                    { return raw_data_key[rowid] <= pred;  } ) ;
+    
+    return ( std::distance(position_array.begin(), it)  - 1 ) ;
+}
+
 
 template<typename KeyType>
 void Bindex<KeyType>::copyDraft(idx_t area_idx, vector<uint64_t>& result){
@@ -214,6 +250,25 @@ void Bindex<KeyType>::refineDraft(idx_t left_pos, idx_t right_pos, vector<uint64
     }
 }
 
+template <typename KeyType>
+void Bindex<KeyType>::negationBitmap(vector<uint64_t>& vector_bitmap ){
+    size_t data_num = position_array.size(); 
+    size_t size = data_num / 64 ;
+    size_t i = 0;
+    for (; i + 3 < size; i += 4) {
+        __m256i vec = _mm256_loadu_si256((__m256i *)(&vector_bitmap[i]));
+        vec = ~vec;
+        _mm256_storeu_si256((__m256i *)(&vector_bitmap[i]), vec);
+    }
+    for (; i < size; ++i) {
+        vector_bitmap[i] = ~vector_bitmap[i];
+    }
+    
+    size_t left_bit = data_num - size * 64;
+    for(size_t j = 0 ; j < left_bit ; j++  ){
+        vector_bitmap[size] ^= ( 1ULL << j );
+    }
+}
 
 template<typename KeyType>
 void Bindex<KeyType>::scanLessThan(KeyType predicate ,vector<uint64_t>& vector_bitmap ){
@@ -239,5 +294,64 @@ void Bindex<KeyType>::scanLessThan(KeyType predicate ,vector<uint64_t>& vector_b
     refineDraft(left_pos,right_pos,vector_bitmap,refineToOne);
 }
 
+template <typename KeyType>
+void Bindex<KeyType>::scanLessEqual(KeyType predicate ,vector<uint64_t>& vector_bitmap ){
+    idx_t area_idx = scanAreaMapLessEqual(predicate) - 1;
+    idx_t pos_idx = scanPositionArrayLessEqual(predicate,area_idx);
+
+    idx_t left_pos = 0;
+    idx_t right_pos = 0;
+    bool refineToOne = true;
+    if( (pos_idx - area_idx * area_size) <=  (area_size / 2)  ){
+        left_pos = area_idx * area_size;
+        right_pos = pos_idx;
+    }else{
+        area_idx++;
+        left_pos = pos_idx+1;
+        right_pos = area_idx * area_size - 1;
+        if( right_pos > position_array.size() ){
+            right_pos = position_array.size() - 1 ;
+        }
+        refineToOne = false;
+    }
+    copyDraft(area_idx,vector_bitmap);
+    refineDraft(left_pos,right_pos,vector_bitmap,refineToOne);
+}
+
+template <typename KeyType>
+void Bindex<KeyType>::scanGreaterThan(KeyType predicate ,vector<uint64_t>& vector_bitmap ){
+    scanLessEqual(predicate,vector_bitmap);
+    negationBitmap(vector_bitmap);
+}
+
+template <typename KeyType>
+void Bindex<KeyType>::scanGreaterEqual(KeyType predicate ,vector<uint64_t>& vector_bitmap ){
+    scanLessThan(predicate,vector_bitmap);
+    negationBitmap(vector_bitmap);
+}
+
+template <typename KeyType>
+void Bindex<KeyType>::scanEqual(KeyType predicate ,vector<uint64_t>& vector_bitmap ){
+    idx_t lower_area_idx = scanAreaMapLessThan(predicate) - 1;
+    idx_t lower_pos_idx = scanPositionArrayLessThan(predicate,lower_area_idx) + 1 ;
+    idx_t upper_area_idx = scanAreaMapLessEqual(predicate) - 1;
+    idx_t upper_pos_idx = scanPositionArrayLessEqual(predicate,upper_area_idx);
+    
+    uint32_t bitmap_size = filter_bit_vector[0].size();
+    vector_bitmap.resize(bitmap_size,0u);
+    refineDraft(lower_pos_idx,upper_pos_idx,vector_bitmap,true);
+}
+
+template <typename KeyType>
+void Bindex<KeyType>::scanNotEqual(KeyType predicate ,vector<uint64_t>& vector_bitmap ){
+    idx_t lower_area_idx = scanAreaMapLessThan(predicate) - 1;
+    idx_t lower_pos_idx = scanPositionArrayLessThan(predicate,lower_area_idx) + 1 ;
+    idx_t upper_area_idx = scanAreaMapLessEqual(predicate) - 1;
+    idx_t upper_pos_idx = scanPositionArrayLessEqual(predicate,upper_area_idx);
+    
+    uint32_t bitmap_size = filter_bit_vector[0].size();
+    vector_bitmap.resize(bitmap_size,0xFFFFFFFFFFFFFFFF);
+    refineDraft(lower_pos_idx,upper_pos_idx,vector_bitmap,false);
+}
 
 } 

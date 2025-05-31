@@ -426,16 +426,53 @@ static void BindexScanLessThan(T predicate,ConstantFilter& constant_filter,share
 	}
 }
 
+template<class T>
+static void BindexScanLessEqual(T predicate,ConstantFilter& constant_filter,shared_ptr<BindexBase> bindex){
+	if( constant_filter.rowgroup_bitmap[bindex->row_group_id].size() == 0 ){
+		shared_ptr<Bindex<T>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<T>>(bindex);
+		bindex_ptr->scanLessEqual(predicate,constant_filter.rowgroup_bitmap[bindex_ptr->row_group_id]);
+	}
+}
+
+template<class T>
+static void BindexScanGreaterThan(T predicate,ConstantFilter& constant_filter,shared_ptr<BindexBase> bindex){
+	if( constant_filter.rowgroup_bitmap[bindex->row_group_id].size() == 0 ){
+		shared_ptr<Bindex<T>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<T>>(bindex);
+		bindex_ptr->scanGreaterThan(predicate,constant_filter.rowgroup_bitmap[bindex_ptr->row_group_id]);
+	}
+}
+
+template<class T>
+static void BindexScanGreaterEqual(T predicate,ConstantFilter& constant_filter,shared_ptr<BindexBase> bindex){
+	if( constant_filter.rowgroup_bitmap[bindex->row_group_id].size() == 0 ){
+		shared_ptr<Bindex<T>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<T>>(bindex);
+		bindex_ptr->scanGreaterEqual(predicate,constant_filter.rowgroup_bitmap[bindex_ptr->row_group_id]);
+	}
+}
+
 
 template <class T>
 static void FilterSelectionSwitchBindex(UnifiedVectorFormat &vdata, T predicate, SelectionVector &sel,
                                   idx_t &approved_tuple_count, ExpressionType comparison_type,
 								  ConstantFilter& constant_filter, shared_ptr<BindexBase> bindex,idx_t vector_index ) {
 	SelectionVector new_sel(approved_tuple_count);
-	
+	idx_t last_count = approved_tuple_count;
+
 	switch (comparison_type) {
 		case ExpressionType::COMPARE_LESSTHAN: {
 			BindexScanLessThan<T>(predicate,constant_filter,bindex);
+			break;
+		}
+		case ExpressionType::COMPARE_LESSTHANOREQUALTO: {
+			BindexScanLessEqual<T>(predicate,constant_filter,bindex);
+			break;
+		}
+		case ExpressionType::COMPARE_GREATERTHAN: {
+			BindexScanGreaterThan<T>(predicate,constant_filter,bindex);
+			break;
+		}
+		case ExpressionType::COMPARE_GREATERTHANOREQUALTO: {
+			BindexScanGreaterEqual<T>(predicate,constant_filter,bindex);
 			break;
 		}
 		
@@ -468,7 +505,7 @@ static void FilterSelectionSwitchBindex(UnifiedVectorFormat &vdata, T predicate,
 			}
 		}
 	}else{
-		for(idx_t i = 0 ; i < STANDARD_VECTOR_SIZE ;i++){
+		for(idx_t i = 0 ; i < last_count ;i++){
 			idx_t rowid = STANDARD_VECTOR_SIZE*vector_index + i;
 			idx_t entry_idx = rowid / 64;
 			idx_t idx_in_entry = rowid % 64;

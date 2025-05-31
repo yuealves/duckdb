@@ -300,41 +300,49 @@ bool CollectionScanState::ScanCommittedBindex(DataChunk &result, TableScanType t
 				row_group->bound_bindex->finish_read = true;
 				switch (result.data[0].GetType().InternalType()){
 					case PhysicalType::UINT16: {
+						//std::cout << "build bidex uint16 : " << row_group->index << std::endl;
 						shared_ptr<Bindex<uint16_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<uint16_t>>(row_group->bound_bindex);
 						bindex_ptr->buildBindex(2048);
 						break;
 					}
 					case PhysicalType::UINT32: {
+						//std::cout << "build bidex uint32 : " << row_group->index << std::endl;
 						shared_ptr<Bindex<uint32_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<uint32_t>>(row_group->bound_bindex);
 						bindex_ptr->buildBindex(2048);
 						break;
 					}
 					case PhysicalType::UINT64: {
+						//std::cout << "build bidex uint64 : " << row_group->index << std::endl;
 						shared_ptr<Bindex<uint64_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<uint64_t>>(row_group->bound_bindex);
 						bindex_ptr->buildBindex(2048);
 						break;
 					}
 					case PhysicalType::INT16: {
+						//std::cout << "build bidex int16 : " << row_group->index << std::endl;
 						shared_ptr<Bindex<int16_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<int16_t>>(row_group->bound_bindex);
 						bindex_ptr->buildBindex(2048);
 						break;
 					}
 					case PhysicalType::INT32: {
+						//std::cout << "build bidex int32 : " << row_group->index << std::endl;
 						shared_ptr<Bindex<int32_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<int32_t>>(row_group->bound_bindex);
 						bindex_ptr->buildBindex(2048);
 						break;
 					}
 					case PhysicalType::INT64: {
+						//std::cout << "build bidex int64 : " << row_group->index << std::endl;
 						shared_ptr<Bindex<int64_t>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<int64_t>>(row_group->bound_bindex);
 						bindex_ptr->buildBindex(2048);
 						break;
 					}
 					case PhysicalType::FLOAT: {
+						//std::cout << "build bidex float : " << row_group->index << std::endl;
 						shared_ptr<Bindex<float>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<float>>(row_group->bound_bindex);
 						bindex_ptr->buildBindex(2048);
 						break;
 					}
 					case PhysicalType::DOUBLE: {
+						//std::cout << "build bidex double : " << row_group->index << std::endl;
 						shared_ptr<Bindex<double>> bindex_ptr = shared_ptr_cast<BindexBase,Bindex<double>>(row_group->bound_bindex);
 						bindex_ptr->buildBindex(2048);
 						break;
