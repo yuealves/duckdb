@@ -34,7 +34,12 @@ enum class TableFilterType : uint8_t {
 //! TableFilter represents a filter pushed down into the table scan.
 class TableFilter {
 public:
+
+	vector<vector<uint64_t>> rowgroup_bitmaps;
+
+
 	explicit TableFilter(TableFilterType filter_type_p) : filter_type(filter_type_p) {
+		rowgroup_bitmaps.resize(1000,vector<uint64_t>());
 	}
 	virtual ~TableFilter() {
 	}

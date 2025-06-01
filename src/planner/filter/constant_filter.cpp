@@ -12,8 +12,6 @@ ConstantFilter::ConstantFilter(ExpressionType comparison_type_p, Value constant_
 		throw InternalException("ConstantFilter constant cannot be NULL - use IsNullFilter instead");
 	}
 	
-	//!!! warning: change size 1000 here! 
-	rowgroup_bitmap.resize(1000,vector<uint64_t>());
 }
 
 FilterPropagateResult ConstantFilter::CheckStatistics(BaseStatistics &stats) {

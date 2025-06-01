@@ -473,6 +473,45 @@ bool RowGroup::CheckZonemapSegments(CollectionScanState &state) {
 	return true;
 }
 
+
+static void SelectionVectorFromBitmap(vector<uint64_t>& bitmap,SelectionVector&  new_sel, idx_t& approved_tuple_count){
+	new_sel.Initialize(approved_tuple_count);
+    approved_tuple_count = 0;  
+    
+    idx_t max_bit = bitmap.size() * 64U ;
+    if( max_bit < STANDARD_VECTOR_SIZE ){
+    	for( idx_t i = 0 ; i < max_bit ; i++ ){
+    		idx_t entry_id = i / 64U;
+        	idx_t id_in_entry = i % 64U;
+        	if( bitmap[entry_id] & ( 1ULL << id_in_entry  ) ){
+          		new_sel.set_index( approved_tuple_count++, i );
+        	}
+      	}
+      	return;
+    }
+
+    uint64_t* bitset = bitmap.data();
+    union U {
+		__m256i vec;
+    	unsigned long arr[4];
+    } u;
+
+    idx_t num_entries = STANDARD_VECTOR_SIZE / 256;
+    for (idx_t i = 0; i < num_entries; ++i) {
+    	u.vec = _mm256_loadu_si256((__m256i *)(bitset + i * 4));
+    	for (idx_t k = 0; k < 4; ++k) {
+    	unsigned long chunk = u.arr[k];
+    	while (chunk) {
+    		unsigned long bit_index = _tzcnt_u64(chunk);
+        	idx_t bit_pos = i * 256 + k * 64 + bit_index;
+        	new_sel.set_index(approved_tuple_count,bit_pos);
+        	approved_tuple_count++;
+        	chunk &= chunk - 1; // Clear the first set bit
+        }
+      }
+    }
+}
+
 template <TableScanType TYPE>
 void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &state, DataChunk &result) {
 	const bool ALLOW_UPDATES = TYPE != TableScanType::TABLE_SCAN_COMMITTED_ROWS_DISALLOW_UPDATES &&
@@ -580,29 +619,57 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 				auto &filter_list = filter_info.GetFilterList();
 
 				if( enable_selection_vector_bitmap ){
-					//std::cout <<"now row group: " << state.row_group->index 
-					//<< " vector index: " << state.vector_index << std::endl;
+					
+					if( filter_info.filter_idx_bindex.size() == 0 && filter_info.filter_idx_scan.size() == 0 ){
+						for (idx_t i = 0; i < filter_list.size(); i++) {
+							auto filter_idx = adaptive_filter->permutation[i];
+							auto &filter = filter_list[filter_idx];
+							if (filter.IsAlwaysTrue()) {
+								// this filter is always true - skip it
+								continue;
+							}
+							if( state.row_group->bound_bindex[filter.table_column_index] == nullptr ){
+								filter_info.filter_idx_scan.push_back(filter_idx);
+							}else{
+								filter_info.filter_idx_bindex.push_back(filter_idx);
+							}
+						}
+					}
 
-					//if(state.row_group->bound_bindex != nullptr ){
-					//	std::cout << state.row_group->bound_bindex->getInfo() << std::endl;
-					//}else{
-					//	std::cout << state.row_group->index << " bindex is null " << std::endl; 
-					//}
-		
-					if(sel.data() != nullptr && filter_list.size() != 1 ){
-						std::cout << "[warning] error occor!" << std::endl;
+					vector<uint64_t> sel_bitmap;
+
+					for(idx_t i = 0 ;  i < filter_info.filter_idx_bindex.size() ; i++ ){
+						auto filter_idx = filter_info.filter_idx_bindex[i];
+						auto &filter = filter_list[filter_idx];
+				
+						auto scan_idx = filter.scan_column_index;
+						auto &col_data = GetColumn(filter.table_column_index);
+						col_data.SelectBindex( sel_bitmap ,result.data[scan_idx],filter.filter, 
+											state.row_group->bound_bindex[filter.table_column_index],state.vector_index);
 					}
-					auto filter_idx = adaptive_filter->permutation[0];
-					auto &filter = filter_list[filter_idx];
-					if (filter.IsAlwaysTrue()) {
-						// this filter is always true - skip it
-						continue;
+
+					if( filter_info.filter_idx_bindex.size()!= 0 ){
+						SelectionVectorFromBitmap(sel_bitmap,sel,approved_tuple_count);
 					}
-					auto scan_idx = filter.scan_column_index;
-					auto &col_data = GetColumn(filter.table_column_index);
-					col_data.SelectBindex(transaction, state.vector_index, state.column_scans[scan_idx],
-									result.data[scan_idx], sel, approved_tuple_count, 
-									filter.filter,state.row_group->bound_bindex[filter.table_column_index]);
+			
+					for(idx_t i = 0 ;  i < filter_info.filter_idx_scan.size() ; i++ ){
+						auto filter_idx = filter_info.filter_idx_scan[i];
+						auto &filter = filter_list[filter_idx];
+				
+						auto scan_idx = filter.scan_column_index;
+						auto &col_data = GetColumn(filter.table_column_index);
+						col_data.Select(transaction, state.vector_index, state.column_scans[scan_idx],
+										result.data[scan_idx], sel, approved_tuple_count, filter.filter);
+						
+					}
+
+					for(idx_t i = 0 ;  i < filter_info.filter_idx_scan.size() ; i++ ){
+						auto filter_idx = filter_info.filter_idx_scan[i];
+						auto &filter = filter_list[filter_idx];
+						
+						result.data[filter.scan_column_index].Slice(sel, approved_tuple_count);	
+					}
+					
 
 				}else{
 					for (idx_t i = 0; i < filter_list.size(); i++) {
@@ -647,8 +714,9 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 				continue;
 			}
 			//! Now we use the selection vector to fetch data for the other columns.
+			// ( (!enable_selection_vector_bitmap)  || (state.row_group->bound_bindex[column_ids[i]] == nullptr) )
 			for (idx_t i = 0; i < column_ids.size(); i++) {
-				if (has_filters && filter_info.ColumnHasFilters(i)) {
+				if (has_filters && filter_info.ColumnHasFilters(i) ) {
 					// column has already been scanned as part of the filtering process
 					continue;
 				}

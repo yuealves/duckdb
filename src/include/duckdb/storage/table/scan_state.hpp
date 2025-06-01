@@ -131,6 +131,10 @@ struct ScanFilter {
 
 class ScanFilterInfo {
 public:
+
+	vector<idx_t> filter_idx_bindex;
+	vector<idx_t> filter_idx_scan;
+
 	~ScanFilterInfo();
 
 	void Initialize(TableFilterSet &filters, const vector<column_t> &column_ids);

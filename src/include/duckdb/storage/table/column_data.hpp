@@ -110,8 +110,7 @@ public:
 	//! Select
 	virtual void Select(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
 	                    SelectionVector &sel, idx_t &count, const TableFilter &filter);
-	virtual void SelectBindex(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
-	                    SelectionVector &sel, idx_t &count, TableFilter &filter, shared_ptr<BindexBase> bindex);
+	virtual void SelectBindex(vector<uint64_t>& sel_bitmap  ,Vector &result,TableFilter &filter ,shared_ptr<BindexBase> bindex, idx_t vector_index);
 	virtual void SelectBitmap(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
 	                    SelectionBitmap &sel_bitmap, idx_t &count, const TableFilter &filter);
 

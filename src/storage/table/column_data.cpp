@@ -307,14 +307,40 @@ void ColumnData::Select(TransactionData transaction, idx_t vector_index, ColumnS
 	ColumnSegment::FilterSelection(sel, result, vdata, filter, scan_count, s_count);
 }
 
-void ColumnData::SelectBindex(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
-                        SelectionVector &sel, idx_t &s_count, TableFilter &filter ,shared_ptr<BindexBase> bindex ) {	
-	//idx_t scan_count = Scan(transaction, vector_index, state, result);
-	idx_t scan_count = s_count;
 
-	UnifiedVectorFormat vdata;
-	//result.ToUnifiedFormat(scan_count, vdata);
-	ColumnSegment::FilterSelectionBindex(sel, result, vdata, filter, scan_count, s_count, bindex,vector_index);
+/* a = a & b  */
+static void ResultBitmapAND( vector<uint64_t>& a , vector<uint64_t>& b , idx_t start_row){
+	idx_t b_start = start_row/64;
+	idx_t b_len = b.size() - b_start;
+	idx_t and_len = b_len < STANDARD_VECTOR_SIZE/64 ? b_len : STANDARD_VECTOR_SIZE/64 ;
+
+	if(a.size() == 0 ){
+		a.assign( b.begin() + b_start , b.begin() + b_start + and_len  );
+		return;
+	}
+
+	size_t i = 0;
+	for (; i + 3 < and_len; i += 4) {
+		__m256i va = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&a[i]));
+		__m256i vb = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&b[b_start+i]));
+		__m256i vand = _mm256_and_si256(va, vb);
+		_mm256_storeu_si256(reinterpret_cast<__m256i*>(&a[i]), vand);
+	}
+	for (; i < and_len; ++i) {
+		a[i] = a[i] & b[b_start+i];
+	}
+
+}
+
+void ColumnData::SelectBindex(vector<uint64_t>& sel_bitmap  ,Vector &result,TableFilter &filter ,shared_ptr<BindexBase> bindex, idx_t vector_index ) {	
+	//idx_t scan_count = Scan(transaction, vector_index, state, result);
+
+	if( filter.rowgroup_bitmaps[bindex->row_group_id].size() == 0 ){
+		ColumnSegment::FilterSelectionBindex(result, filter, bindex);
+    }
+
+	ResultBitmapAND(sel_bitmap,filter.rowgroup_bitmaps[bindex->row_group_id],vector_index*STANDARD_VECTOR_SIZE); //!!!vector_index!!!
+	
 }
 
 
