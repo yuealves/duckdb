@@ -129,8 +129,11 @@ static void TableScanFunc(ClientContext &context, TableFunctionInput &data_p, Da
 			                        TableScanType::TABLE_SCAN_COMMITTED_ROWS_OMIT_PERMANENTLY_DELETED);
 		} else if (gstate.CanRemoveFilterColumns()) {
 			state.all_columns.Reset();
+			if( state.scan_state.table_state.projection_bindex_ids.size() == 0 ){
+				state.scan_state.table_state.projection_bindex_ids = gstate.projection_ids;
+			}
 			storage.Scan(transaction, state.all_columns, state.scan_state);
-			output.ReferenceColumns(state.all_columns, gstate.projection_ids);
+			output.ReferenceColumns(state.all_columns, gstate.projection_ids);   //NOTE:  to use this info !!!
 		} else {
 			storage.Scan(transaction, output, state.scan_state);
 		}

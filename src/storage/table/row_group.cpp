@@ -512,6 +512,19 @@ static void SelectionVectorFromBitmap(vector<uint64_t>& bitmap,SelectionVector& 
     }
 }
 
+static bool NotUseBindex(bool enable_selection_vector_bitmap, CollectionScanState& state, idx_t table_column_index ){
+	return   (!enable_selection_vector_bitmap)  || (state.row_group->bound_bindex[table_column_index] == nullptr)  ;
+}
+
+static bool BindexButNotProj(idx_t idx, vector<idx_t>& projection_ids ){
+	for(idx_t j = 0 ; j < projection_ids.size() ; j++ ){
+		if( idx == projection_ids[j]){
+			return false; 
+		}
+	}
+	return true;
+}
+
 template <TableScanType TYPE>
 void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &state, DataChunk &result) {
 	const bool ALLOW_UPDATES = TYPE != TableScanType::TABLE_SCAN_COMMITTED_ROWS_DISALLOW_UPDATES &&
@@ -714,9 +727,9 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 				continue;
 			}
 			//! Now we use the selection vector to fetch data for the other columns.
-			// ( (!enable_selection_vector_bitmap)  || (state.row_group->bound_bindex[column_ids[i]] == nullptr) )
 			for (idx_t i = 0; i < column_ids.size(); i++) {
-				if (has_filters && filter_info.ColumnHasFilters(i) ) {
+				if (has_filters && filter_info.ColumnHasFilters(i) && 
+					(NotUseBindex(enable_selection_vector_bitmap,state, column_ids[i])  || BindexButNotProj(i,state.projection_bindex_ids)  )  ) {
 					// column has already been scanned as part of the filtering process
 					continue;
 				}

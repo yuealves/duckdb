@@ -195,6 +195,8 @@ public:
 	//! The valid selection
 	SelectionVector valid_sel;
 
+	vector<column_t> projection_bindex_ids; 
+
 public:
 	void Initialize(const vector<LogicalType> &types);
 	const vector<storage_t> &GetColumnIds();

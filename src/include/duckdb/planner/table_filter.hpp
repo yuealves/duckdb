@@ -39,7 +39,7 @@ public:
 
 
 	explicit TableFilter(TableFilterType filter_type_p) : filter_type(filter_type_p) {
-		rowgroup_bitmaps.resize(1000,vector<uint64_t>());
+		rowgroup_bitmaps.resize(2000,vector<uint64_t>());
 	}
 	virtual ~TableFilter() {
 	}
