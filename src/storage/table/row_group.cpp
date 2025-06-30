@@ -525,6 +525,60 @@ static bool BindexButNotProj(idx_t idx, vector<idx_t>& projection_ids ){
 	return true;
 }
 
+template <typename T>
+void FilterScanFromBindexImpl(idx_t vector_index, Vector &result, shared_ptr<BindexBase> bindex_base,
+                              SelectionVector &sel, idx_t approved_tuple_count) {
+  T *result_data = duckdb::FlatVector::GetData<T>(result);
+  shared_ptr<Bindex<T>> bindex = shared_ptr_cast<BindexBase, Bindex<T>>(bindex_base);
+  for (idx_t i = 0; i < approved_tuple_count; i++) {
+    idx_t row_index = vector_index * STANDARD_VECTOR_SIZE + sel.get_index(i);
+    result_data[i] = bindex->raw_data_key[row_index];
+  }
+  return;
+}
+
+void FilterScanFromBindex(idx_t vector_index, Vector &result, shared_ptr<BindexBase> bindex, SelectionVector &sel,
+                          idx_t approved_tuple_count) {
+  result.Flatten(STANDARD_VECTOR_SIZE);
+  switch (result.GetType().InternalType()) {
+  case PhysicalType::UINT16: {
+    FilterScanFromBindexImpl<uint16_t>(vector_index, result, bindex, sel, approved_tuple_count);
+    break;
+  }
+  case PhysicalType::UINT32: {
+    FilterScanFromBindexImpl<uint32_t>(vector_index, result, bindex, sel, approved_tuple_count);
+    break;
+  }
+  case PhysicalType::UINT64: {
+    FilterScanFromBindexImpl<uint64_t>(vector_index, result, bindex, sel, approved_tuple_count);
+    break;
+  }
+  case PhysicalType::INT16: {
+    FilterScanFromBindexImpl<int16_t>(vector_index, result, bindex, sel, approved_tuple_count);
+    break;
+  }
+  case PhysicalType::INT32: {
+    FilterScanFromBindexImpl<int32_t>(vector_index, result, bindex, sel, approved_tuple_count);
+    break;
+  }
+  case PhysicalType::INT64: {
+    FilterScanFromBindexImpl<int64_t>(vector_index, result, bindex, sel, approved_tuple_count);
+    break;
+  }
+  case PhysicalType::FLOAT: {
+    FilterScanFromBindexImpl<float>(vector_index, result, bindex, sel, approved_tuple_count);
+    break;
+  }
+  case PhysicalType::DOUBLE: {
+    FilterScanFromBindexImpl<double>(vector_index, result, bindex, sel, approved_tuple_count);
+    break;
+  }
+  default:
+    throw InvalidTypeException(result.GetType(), "Invalid type for FilterScanFromBindex");
+  }
+  return;
+}
+
 template <TableScanType TYPE>
 void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &state, DataChunk &result) {
 	const bool ALLOW_UPDATES = TYPE != TableScanType::TABLE_SCAN_COMMITTED_ROWS_DISALLOW_UPDATES &&
@@ -744,14 +798,19 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 					}
 				} else {
 					auto &col_data = GetColumn(column);
-					if (TYPE == TableScanType::TABLE_SCAN_REGULAR) {
-						col_data.FilterScan(transaction, state.vector_index, state.column_scans[i], result.data[i], sel,
-						                    approved_tuple_count);
-					} else {
-						col_data.FilterScanCommitted(state.vector_index, state.column_scans[i], result.data[i], sel,
-						                             approved_tuple_count, ALLOW_UPDATES);
-					}
-				}
+          if (TYPE == TableScanType::TABLE_SCAN_REGULAR) {
+            if (enable_selection_vector_bitmap && state.row_group->bound_bindex[column]) {
+              FilterScanFromBindex(state.vector_index, result.data[i], state.row_group->bound_bindex[column], sel,
+                                   approved_tuple_count);
+            } else {
+              col_data.FilterScan(transaction, state.vector_index, state.column_scans[i], result.data[i], sel,
+                                  approved_tuple_count);
+            }
+          } else {
+            col_data.FilterScanCommitted(state.vector_index, state.column_scans[i], result.data[i], sel,
+                                         approved_tuple_count, ALLOW_UPDATES);
+          }
+        }
 			}
 			filter_info.EndFilter(filter_state);
 

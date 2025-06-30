@@ -343,7 +343,6 @@ void ColumnData::SelectBindex(vector<uint64_t>& sel_bitmap  ,Vector &result,Tabl
 	
 }
 
-
 void ColumnData::SelectBitmap(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
                         SelectionBitmap &sel_bitmap, idx_t &s_count, const TableFilter &filter  ) {	
 	idx_t scan_count = Scan(transaction, vector_index, state, result);
